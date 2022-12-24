@@ -1,0 +1,1 @@
+search index!=_internal  earliest=-24h | stats count by index, sourcetype
