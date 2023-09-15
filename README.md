@@ -16,7 +16,7 @@ SPLUNKTIMEOUT=120
 SPLUNKTLSVERIFY=true
 ```
 
-* You can use credentials or a Splunk Authenticartion token. If you use SPLUNKTOKEN it will ignore the credentials or lack of them.
+* You can use credentials or a Splunk Authentication token. If you use SPLUNKTOKEN it will ignore the credentials or lack of them.
 * You can set SPLUNKTLSVERIFY to false to avoid validating a Splunk TLS Certificate. If the value fails to convert to boolean type properly it will default to false.
 * SPLUNKTIMEOUT will default to 120 seconds if not specified. This is the max time the program will keep checking for the dispatched query to reach a DONE state.
 
