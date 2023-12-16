@@ -3,9 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
-	"goSplunk/splunk"
 	"log"
 	"os"
+	"splunk"
 	"strconv"
 	"sync"
 	"time"
