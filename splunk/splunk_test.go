@@ -1,6 +1,7 @@
 package splunk
 
 import (
+	"log"
 	"testing"
 )
 
@@ -26,4 +27,5 @@ func TestSplunkConnection(t *testing.T) {
 	if got != want {
 		t.Errorf("got %v, wanted %v", got, want)
 	}
+	log.Println(got)
 }
