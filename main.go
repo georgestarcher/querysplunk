@@ -13,6 +13,7 @@ import (
 	// import for the .env file support
 	"github.com/georgestarcher/querysplunk/splunk"
 	"github.com/joho/godotenv"
+	"gopkg.in/yaml.v3"
 )
 
 // setup more standard logging format
@@ -74,24 +75,135 @@ func readSearchFile(path string) (string, error) {
 	return search, nil
 }
 
+type searchConfig struct {
+	App         string            `yaml:"app"`
+	OutputFile  string            `yaml:"output_file"`
+	Search      string            `yaml:"search"`
+	Dispatch    dispatchConfig    `yaml:"dispatch"`
+	Results     resultsConfig     `yaml:"results"`
+	Diagnostics diagnosticsConfig `yaml:"diagnostics"`
+}
+
+type dispatchConfig struct {
+	EarliestTime   string   `yaml:"earliest_time"`
+	LatestTime     string   `yaml:"latest_time"`
+	MaxCount       *int     `yaml:"max_count"`
+	StatusBuckets  *int     `yaml:"status_buckets"`
+	RequiredFields []string `yaml:"required_fields"`
+}
+
+type resultsConfig struct {
+	OutputMode string `yaml:"output_mode"`
+	Count      *int   `yaml:"count"`
+	Offset     *int   `yaml:"offset"`
+}
+
+type diagnosticsConfig struct {
+	SearchLog     string `yaml:"search_log"`
+	SearchLogFile string `yaml:"search_log_file"`
+}
+
+func loadSearchConfig(path string) (searchConfig, error) {
+	fileContent, err := os.ReadFile(path)
+	if err != nil {
+		return searchConfig{}, err
+	}
+
+	var config searchConfig
+	if err := yaml.Unmarshal(fileContent, &config); err != nil {
+		return searchConfig{}, err
+	}
+	if strings.TrimSpace(config.Search) == "" {
+		return searchConfig{}, fmt.Errorf("search config %q is missing search content", path)
+	}
+	mode := strings.TrimSpace(config.Diagnostics.SearchLog)
+	if mode != "" {
+		switch splunk.SearchLogMode(mode) {
+		case splunk.SearchLogModeOff, splunk.SearchLogModeSummary, splunk.SearchLogModeSave, splunk.SearchLogModeBoth:
+		default:
+			return searchConfig{}, fmt.Errorf("invalid diagnostics.search_log value %q; must be one of off, summary, save, both", mode)
+		}
+	}
+	return config, nil
+}
+
+func explicitFlags() map[string]bool {
+	set := make(map[string]bool)
+	flag.Visit(func(f *flag.Flag) {
+		set[f.Name] = true
+	})
+	return set
+}
+
+func addStringParam(params map[string][]string, key string, value string) {
+	value = strings.TrimSpace(value)
+	if value != "" {
+		params[key] = append(params[key], value)
+	}
+}
+
+func addIntParam(params map[string][]string, key string, value *int) {
+	if value != nil {
+		params[key] = append(params[key], strconv.Itoa(*value))
+	}
+}
+
+func dispatchParams(config dispatchConfig) map[string][]string {
+	params := make(map[string][]string)
+	addStringParam(params, "earliest_time", config.EarliestTime)
+	addStringParam(params, "latest_time", config.LatestTime)
+	addIntParam(params, "max_count", config.MaxCount)
+	addIntParam(params, "status_buckets", config.StatusBuckets)
+	for _, field := range config.RequiredFields {
+		addStringParam(params, "rf", field)
+	}
+	return params
+}
+
+func resultParams(config resultsConfig) map[string][]string {
+	params := make(map[string][]string)
+	addStringParam(params, "output_mode", config.OutputMode)
+	addIntParam(params, "count", config.Count)
+	addIntParam(params, "offset", config.Offset)
+	return params
+}
+
 func main() {
 	var queryFile string
 	var outputFile string
 	var useEnvFile bool
 	var appContext string
+	var configFile string
 
 	log.SetFlags(0)
 	log.SetOutput(new(logWriter))
 
 	flag.BoolVar(&useEnvFile, "e", false, "Use .env file")
 	flag.StringVar(&appContext, "app", "", "Splunk app context (namespace) for query execution")
+	flag.StringVar(&configFile, "config", "", "Read structured search config from this YAML file")
 	flag.StringVar(&queryFile, "q", "query.txt", "Read the SPL search from this file")
 	flag.StringVar(&outputFile, "o", "splunkresults.json", "Write Splunk results to this JSON file")
 	flag.Parse()
+	flagsSet := explicitFlags()
 
 	if useEnvFile {
 		if err := godotenv.Load(); err != nil {
 			log.Fatal("ERROR: could not load .env file")
+		}
+	}
+
+	var config searchConfig
+	if configFile != "" {
+		var err error
+		config, err = loadSearchConfig(configFile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if !flagsSet["app"] {
+			appContext = config.App
+		}
+		if !flagsSet["o"] && strings.TrimSpace(config.OutputFile) != "" {
+			outputFile = config.OutputFile
 		}
 	}
 
@@ -100,9 +212,15 @@ func main() {
 	}
 	appContext = strings.TrimSpace(appContext)
 
-	splunkQueryString, err := readSearchFile(queryFile)
-	if err != nil {
-		log.Fatal(err)
+	var splunkQueryString string
+	var err error
+	if configFile != "" {
+		splunkQueryString = config.Search
+	} else {
+		splunkQueryString, err = readSearchFile(queryFile)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	username := os.Getenv("SPLUNKUSERNAME")
@@ -145,7 +263,16 @@ func main() {
 	}
 
 	splunkQuery := splunk.SplunkQuery{Query: splunkQueryString}
-	if err = conn.DispatchQuery(ctx, &splunkQuery, outputFile); err != nil {
+	options := splunk.DefaultDispatchOptions(outputFile)
+	if configFile != "" {
+		options.DispatchParams = dispatchParams(config.Dispatch)
+		options.ResultParams = resultParams(config.Results)
+		if strings.TrimSpace(config.Diagnostics.SearchLog) != "" {
+			options.SearchLogMode = splunk.SearchLogMode(strings.TrimSpace(config.Diagnostics.SearchLog))
+		}
+		options.SearchLogFile = strings.TrimSpace(config.Diagnostics.SearchLogFile)
+	}
+	if err = conn.DispatchQueryWithOptions(ctx, &splunkQuery, options); err != nil {
 		log.Fatalf("ERROR: %s", err)
 	}
 

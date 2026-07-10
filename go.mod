@@ -7,4 +7,6 @@ require (
 	github.com/joho/godotenv v1.4.0
 )
 
+require gopkg.in/yaml.v3 v3.0.1
+
 replace github.com/georgestarcher/querysplunk/splunk => ./splunk

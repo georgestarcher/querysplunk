@@ -6,6 +6,7 @@ Go 1.26+ is required.
 ## Dependencies
 If you build from source you will need package(s)
 * https://github.com/joho/godotenv
+* https://gopkg.in/yaml.v3
 
 ## Quick setup
 
@@ -45,6 +46,63 @@ Bonus that this method of calling a savedsearch works great from SOAR products o
 ```
 savedsearch "SOAR - Auth Model - Investigation" user=bob
 ```
+
+## Structured YAML search config
+
+Plain SPL files remain supported. Use `-config` when a search needs reusable
+settings beyond the SPL text, such as app context, output file, dispatch
+parameters, result parameters, or search log diagnostics.
+
+```bash
+./splunkquery-darwin -config search.yml
+```
+
+Example:
+
+```yaml
+app: search
+output_file: splunkresults.json
+search: |
+  search index=_internal earliest=-15m
+  | head 1
+
+dispatch:
+  earliest_time: "-15m"
+  latest_time: "now"
+  max_count: 50000
+  status_buckets: 0
+  required_fields:
+    - sourcetype
+
+results:
+  output_mode: json
+  count: 0
+  offset: 0
+
+diagnostics:
+  search_log: summary
+  search_log_file: splunksearch.log
+```
+
+Secrets do not belong in YAML config. Continue to provide `SPLUNKBASEURL`,
+`SPLUNKTOKEN`, `SPLUNKUSERNAME`, and `SPLUNKPASSWORD` through environment
+variables or `.env`.
+
+CLI flags override config values where both are set:
+
+- `-app` overrides `app`
+- `-o` overrides `output_file`
+
+Supported `diagnostics.search_log` modes:
+
+- `off`: do not fetch `search.log`
+- `summary`: fetch and summarize execution duration, warnings, and errors
+- `save`: fetch and save the full `search.log`
+- `both`: summarize and save the full `search.log`
+
+If `diagnostics.search_log_file` is omitted for `save` or `both`, the tool
+derives a file name from the result output file, such as
+`splunkresults.search.log`.
 
 ## Search job lifecycle and diagnostics
 
@@ -90,6 +148,8 @@ diagnostics. Large diagnostic output is bounded before being written to logs.
 ```
 
 Usage of ./splunkquery-darwin:
+  -config string
+        Read structured search config from this YAML file
   -e
         Use .env file
   -o string

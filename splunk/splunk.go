@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -47,6 +48,7 @@ type SplunkQuery struct {
 	Results        []byte
 	LogDiagnostics JobLogDiagnostics
 	SearchLogRead  bool
+	SearchLogFile  string
 }
 
 type SplunkJobStatus struct {
@@ -59,6 +61,23 @@ type JobLogDiagnostics struct {
 	ExecutionDuration string
 	Warnings          []string
 	Errors            []string
+}
+
+type SearchLogMode string
+
+const (
+	SearchLogModeOff     SearchLogMode = "off"
+	SearchLogModeSummary SearchLogMode = "summary"
+	SearchLogModeSave    SearchLogMode = "save"
+	SearchLogModeBoth    SearchLogMode = "both"
+)
+
+type DispatchOptions struct {
+	OutputFile     string
+	DispatchParams map[string][]string
+	ResultParams   map[string][]string
+	SearchLogMode  SearchLogMode
+	SearchLogFile  string
 }
 
 const (
@@ -376,6 +395,36 @@ func (conn SplunkConnection) cancelJob(query *SplunkQuery) error {
 	return err
 }
 
+func DefaultDispatchOptions(outputFile string) DispatchOptions {
+	return DispatchOptions{
+		OutputFile:    outputFile,
+		SearchLogMode: SearchLogModeSummary,
+	}
+}
+
+func (options DispatchOptions) normalized() DispatchOptions {
+	if options.SearchLogMode == "" {
+		options.SearchLogMode = SearchLogModeSummary
+	}
+	return options
+}
+
+func addParams(values url.Values, params map[string][]string) url.Values {
+	if values == nil {
+		values = make(url.Values)
+	}
+	for key, paramValues := range params {
+		trimmedKey := strings.TrimSpace(key)
+		if trimmedKey == "" {
+			continue
+		}
+		for _, value := range paramValues {
+			values.Add(trimmedKey, value)
+		}
+	}
+	return values
+}
+
 // Write results bytes to file as unmodified JSON.
 // Something else like python etc can be used on the saved API response.
 func (conn SplunkConnection) writeResults(query *SplunkQuery, outputfile string) error {
@@ -383,10 +432,13 @@ func (conn SplunkConnection) writeResults(query *SplunkQuery, outputfile string)
 }
 
 // Fetch job results.
-func (conn SplunkConnection) jobResults(ctx context.Context, query *SplunkQuery) error {
+func (conn SplunkConnection) jobResults(ctx context.Context, query *SplunkQuery, resultParams map[string][]string) error {
 	data := make(url.Values)
 	data = conn.namespaceValues(data)
-	data.Add("output_mode", "json")
+	data = addParams(data, resultParams)
+	if data.Get("output_mode") == "" {
+		data.Add("output_mode", "json")
+	}
 
 	url := fmt.Sprintf("%s/results/", conn.jobURL(query))
 	response, err := conn.httpGet(ctx, url, &data)
@@ -465,8 +517,30 @@ func logDiagnostics(diagnostics JobLogDiagnostics) {
 	}
 }
 
-func (conn SplunkConnection) collectJobLogDiagnostics(ctx context.Context, query *SplunkQuery) {
+func shouldSummarizeSearchLog(mode SearchLogMode) bool {
+	return mode == SearchLogModeSummary || mode == SearchLogModeBoth
+}
+
+func shouldSaveSearchLog(mode SearchLogMode) bool {
+	return mode == SearchLogModeSave || mode == SearchLogModeBoth
+}
+
+func derivedSearchLogFile(outputFile string) string {
+	if strings.TrimSpace(outputFile) == "" {
+		return "splunk.search.log"
+	}
+	ext := filepath.Ext(outputFile)
+	if ext == "" {
+		return outputFile + ".search.log"
+	}
+	return strings.TrimSuffix(outputFile, ext) + ".search.log"
+}
+
+func (conn SplunkConnection) collectJobLogDiagnostics(ctx context.Context, query *SplunkQuery, options DispatchOptions) {
 	if query.Job.Sid == "" {
+		return
+	}
+	if options.SearchLogMode == SearchLogModeOff {
 		return
 	}
 
@@ -477,13 +551,33 @@ func (conn SplunkConnection) collectJobLogDiagnostics(ctx context.Context, query
 	}
 	query.SearchLogRead = true
 	query.LogDiagnostics = AnalyzeJobLog(searchLog)
-	logDiagnostics(query.LogDiagnostics)
+	if shouldSummarizeSearchLog(options.SearchLogMode) {
+		logDiagnostics(query.LogDiagnostics)
+	}
+	if shouldSaveSearchLog(options.SearchLogMode) {
+		searchLogFile := strings.TrimSpace(options.SearchLogFile)
+		if searchLogFile == "" {
+			searchLogFile = derivedSearchLogFile(options.OutputFile)
+		}
+		if err := os.WriteFile(searchLogFile, []byte(searchLog), 0644); err != nil {
+			log.Printf("WARN: could not write Splunk search log for job %s to %s: %v", query.Job.Sid, searchLogFile, err)
+			return
+		}
+		query.SearchLogFile = searchLogFile
+		log.Printf("INFO: Wrote Splunk search log to %s", searchLogFile)
+	}
 }
 
 // Dispatch Splunk Query: Main Entry Method.
 func (conn SplunkConnection) DispatchQuery(ctx context.Context, query *SplunkQuery, outputfile string) error {
+	return conn.DispatchQueryWithOptions(ctx, query, DefaultDispatchOptions(outputfile))
+}
+
+func (conn SplunkConnection) DispatchQueryWithOptions(ctx context.Context, query *SplunkQuery, options DispatchOptions) error {
+	options = options.normalized()
 	data := make(url.Values)
 	data = conn.namespaceValues(data)
+	data = addParams(data, options.DispatchParams)
 	data.Add("search", query.Query)
 
 	response, err := conn.httpPost(ctx, fmt.Sprintf("%s/services/search/jobs/", conn.BaseURL), &data)
@@ -505,19 +599,19 @@ func (conn SplunkConnection) DispatchQuery(ctx context.Context, query *SplunkQue
 	if err = conn.jobStatus(ctx, query); err != nil {
 		diagnosticCtx, cancel := context.WithTimeout(context.Background(), cancelTimeout)
 		defer cancel()
-		conn.collectJobLogDiagnostics(diagnosticCtx, query)
+		conn.collectJobLogDiagnostics(diagnosticCtx, query, options)
 		return err
 	}
 	if query.State != dispatchStateDone {
-		conn.collectJobLogDiagnostics(ctx, query)
+		conn.collectJobLogDiagnostics(ctx, query, options)
 		return fmt.Errorf("unexpected job terminal state: %s", query.State)
 	}
-	conn.collectJobLogDiagnostics(ctx, query)
+	conn.collectJobLogDiagnostics(ctx, query, options)
 
-	if err = conn.jobResults(ctx, query); err != nil {
+	if err = conn.jobResults(ctx, query, options.ResultParams); err != nil {
 		return err
 	}
-	return conn.writeResults(query, outputfile)
+	return conn.writeResults(query, options.OutputFile)
 }
 
 func (conn SplunkConnection) namespaceValues(values url.Values) url.Values {

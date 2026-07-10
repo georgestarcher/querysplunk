@@ -299,6 +299,179 @@ func TestDispatchQueryReturnsErrorOnResultFetchFailure(t *testing.T) {
 	}
 }
 
+func TestDispatchQueryWithOptionsSendsDispatchAndResultParams(t *testing.T) {
+	sid := "sid-options"
+	resultsPayload := `{"results": []}`
+	var searchLogCalls atomic.Int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/services/search/jobs/":
+			if err := r.ParseForm(); err != nil {
+				t.Fatalf("unexpected parse error: %v", err)
+			}
+			if got := r.FormValue("earliest_time"); got != "-15m" {
+				t.Fatalf("expected earliest_time -15m, got %q", got)
+			}
+			if got := r.FormValue("latest_time"); got != "now" {
+				t.Fatalf("expected latest_time now, got %q", got)
+			}
+			if got := r.FormValue("max_count"); got != "50000" {
+				t.Fatalf("expected max_count 50000, got %q", got)
+			}
+			if got := r.Form["rf"]; len(got) != 2 || got[0] != "host" || got[1] != "sourcetype" {
+				t.Fatalf("expected two rf values, got %#v", got)
+			}
+			w.Header().Set("Content-Type", "application/xml")
+			_, err := w.Write([]byte(`<response><sid>` + sid + `</sid></response>`))
+			if err != nil {
+				t.Fatalf("unexpected write error: %v", err)
+			}
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/services/search/jobs/"+sid):
+			w.Header().Set("Content-Type", "application/json")
+			_, err := w.Write([]byte(`{"entry":[{"content":{"dispatchState":"DONE"}}]}`))
+			if err != nil {
+				t.Fatalf("unexpected write error: %v", err)
+			}
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/services/search/jobs/"+sid+"/search.log"):
+			searchLogCalls.Add(1)
+			w.WriteHeader(http.StatusOK)
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/services/search/jobs/"+sid+"/results/"):
+			if got := r.URL.Query().Get("output_mode"); got != "csv" {
+				t.Fatalf("expected output_mode csv, got %q", got)
+			}
+			if got := r.URL.Query().Get("count"); got != "0" {
+				t.Fatalf("expected count 0, got %q", got)
+			}
+			if got := r.URL.Query().Get("offset"); got != "10" {
+				t.Fatalf("expected offset 10, got %q", got)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, err := w.Write([]byte(resultsPayload))
+			if err != nil {
+				t.Fatalf("unexpected write error: %v", err)
+			}
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer ts.Close()
+
+	conn := SplunkConnection{
+		AuthToken:    "token",
+		BaseURL:      ts.URL,
+		Timeout:      5 * time.Second,
+		PollInterval: time.Millisecond,
+	}
+	query := SplunkQuery{Query: "search index=_internal | head 1"}
+	options := DispatchOptions{
+		OutputFile: t.TempDir() + "/out.json",
+		DispatchParams: map[string][]string{
+			"earliest_time": {"-15m"},
+			"latest_time":   {"now"},
+			"max_count":     {"50000"},
+			"rf":            {"host", "sourcetype"},
+		},
+		ResultParams: map[string][]string{
+			"output_mode": {"csv"},
+			"count":       {"0"},
+			"offset":      {"10"},
+		},
+		SearchLogMode: SearchLogModeOff,
+	}
+
+	if err := conn.DispatchQueryWithOptions(context.Background(), &query, options); err != nil {
+		t.Fatalf("expected success, got %v", err)
+	}
+	if query.SearchLogRead {
+		t.Fatal("expected search.log fetch to be disabled")
+	}
+	if got := searchLogCalls.Load(); got != 0 {
+		t.Fatalf("expected no search.log calls, got %d", got)
+	}
+}
+
+func TestDispatchQueryWithOptionsSavesSearchLog(t *testing.T) {
+	sid := "sid-save-log"
+	searchLog := "INFO Search completed in 1 seconds\nWARN DispatchThread - saved warning"
+	resultsPayload := `{"results": []}`
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/services/search/jobs/":
+			w.Header().Set("Content-Type", "application/xml")
+			_, err := w.Write([]byte(`<response><sid>` + sid + `</sid></response>`))
+			if err != nil {
+				t.Fatalf("unexpected write error: %v", err)
+			}
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/services/search/jobs/"+sid):
+			w.Header().Set("Content-Type", "application/json")
+			_, err := w.Write([]byte(`{"entry":[{"content":{"dispatchState":"DONE"}}]}`))
+			if err != nil {
+				t.Fatalf("unexpected write error: %v", err)
+			}
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/services/search/jobs/"+sid+"/search.log"):
+			_, err := w.Write([]byte(searchLog))
+			if err != nil {
+				t.Fatalf("unexpected write error: %v", err)
+			}
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/services/search/jobs/"+sid+"/results/"):
+			w.Header().Set("Content-Type", "application/json")
+			_, err := w.Write([]byte(resultsPayload))
+			if err != nil {
+				t.Fatalf("unexpected write error: %v", err)
+			}
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer ts.Close()
+
+	tempDir := t.TempDir()
+	searchLogFile := tempDir + "/custom-search.log"
+	conn := SplunkConnection{
+		AuthToken:    "token",
+		BaseURL:      ts.URL,
+		Timeout:      5 * time.Second,
+		PollInterval: time.Millisecond,
+	}
+	query := SplunkQuery{Query: "search index=_internal | head 1"}
+	options := DispatchOptions{
+		OutputFile:     tempDir + "/out.json",
+		SearchLogMode:  SearchLogModeBoth,
+		SearchLogFile:  searchLogFile,
+		ResultParams:   map[string][]string{"output_mode": {"json"}},
+		DispatchParams: map[string][]string{},
+	}
+
+	if err := conn.DispatchQueryWithOptions(context.Background(), &query, options); err != nil {
+		t.Fatalf("expected success, got %v", err)
+	}
+	if !query.SearchLogRead {
+		t.Fatal("expected search.log to be read")
+	}
+	if query.SearchLogFile != searchLogFile {
+		t.Fatalf("expected saved search log path %q, got %q", searchLogFile, query.SearchLogFile)
+	}
+	actual, err := os.ReadFile(searchLogFile)
+	if err != nil {
+		t.Fatalf("read saved search log: %v", err)
+	}
+	if string(actual) != searchLog {
+		t.Fatalf("unexpected saved search log content: %q", string(actual))
+	}
+	if len(query.LogDiagnostics.Warnings) != 1 {
+		t.Fatalf("expected summarized warning, got %#v", query.LogDiagnostics.Warnings)
+	}
+}
+
+func TestDerivedSearchLogFile(t *testing.T) {
+	if got := derivedSearchLogFile("splunkresults.json"); got != "splunkresults.search.log" {
+		t.Fatalf("expected derived file, got %q", got)
+	}
+	if got := derivedSearchLogFile("splunkresults"); got != "splunkresults.search.log" {
+		t.Fatalf("expected derived file without extension, got %q", got)
+	}
+}
+
 func TestJobStatusReturnsErrorOnFailedState(t *testing.T) {
 	terminalStates := []string{
 		dispatchStateFailed,

@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -139,5 +140,114 @@ func TestReadSearchFileReturnsMissingFileError(t *testing.T) {
 	}
 	if !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected not-exist error, got %v", err)
+	}
+}
+
+func TestLoadSearchConfig(t *testing.T) {
+	configFile := t.TempDir() + "/search.yml"
+	content := `app: search
+output_file: out.json
+search: |
+  search index=_internal earliest=-15m
+  | head 1
+dispatch:
+  earliest_time: "-15m"
+  latest_time: "now"
+  max_count: 50000
+  status_buckets: 0
+  required_fields:
+    - sourcetype
+results:
+  output_mode: json
+  count: 0
+  offset: 10
+diagnostics:
+  search_log: both
+  search_log_file: search.log
+`
+	if err := os.WriteFile(configFile, []byte(content), 0644); err != nil {
+		t.Fatalf("write config fixture: %v", err)
+	}
+
+	config, err := loadSearchConfig(configFile)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if config.App != "search" {
+		t.Fatalf("expected app, got %q", config.App)
+	}
+	if config.OutputFile != "out.json" {
+		t.Fatalf("expected output file, got %q", config.OutputFile)
+	}
+	if !strings.Contains(config.Search, "index=_internal") {
+		t.Fatalf("expected search content, got %q", config.Search)
+	}
+	if config.Dispatch.MaxCount == nil || *config.Dispatch.MaxCount != 50000 {
+		t.Fatalf("expected max_count 50000, got %#v", config.Dispatch.MaxCount)
+	}
+	if config.Results.Count == nil || *config.Results.Count != 0 {
+		t.Fatalf("expected count 0, got %#v", config.Results.Count)
+	}
+	if config.Diagnostics.SearchLog != "both" {
+		t.Fatalf("expected diagnostics search_log both, got %q", config.Diagnostics.SearchLog)
+	}
+}
+
+func TestLoadSearchConfigRejectsMissingSearch(t *testing.T) {
+	configFile := t.TempDir() + "/search.yml"
+	if err := os.WriteFile(configFile, []byte("app: search\n"), 0644); err != nil {
+		t.Fatalf("write config fixture: %v", err)
+	}
+
+	_, err := loadSearchConfig(configFile)
+	if err == nil {
+		t.Fatal("expected missing search error")
+	}
+}
+
+func TestLoadSearchConfigRejectsInvalidSearchLogMode(t *testing.T) {
+	configFile := t.TempDir() + "/search.yml"
+	content := `search: search index=_internal | head 1
+diagnostics:
+  search_log: loud
+`
+	if err := os.WriteFile(configFile, []byte(content), 0644); err != nil {
+		t.Fatalf("write config fixture: %v", err)
+	}
+
+	_, err := loadSearchConfig(configFile)
+	if err == nil {
+		t.Fatal("expected invalid search log mode error")
+	}
+}
+
+func TestConfigParams(t *testing.T) {
+	maxCount := 50000
+	statusBuckets := 0
+	dispatch := dispatchParams(dispatchConfig{
+		EarliestTime:   "-15m",
+		LatestTime:     "now",
+		MaxCount:       &maxCount,
+		StatusBuckets:  &statusBuckets,
+		RequiredFields: []string{"sourcetype", "host"},
+	})
+	if got := dispatch["earliest_time"][0]; got != "-15m" {
+		t.Fatalf("expected earliest_time, got %q", got)
+	}
+	if got := dispatch["status_buckets"][0]; got != "0" {
+		t.Fatalf("expected status_buckets 0, got %q", got)
+	}
+	if got := len(dispatch["rf"]); got != 2 {
+		t.Fatalf("expected two required fields, got %d", got)
+	}
+
+	count := 0
+	offset := 10
+	results := resultParams(resultsConfig{OutputMode: "json", Count: &count, Offset: &offset})
+	if got := results["count"][0]; got != "0" {
+		t.Fatalf("expected count 0, got %q", got)
+	}
+	if got := results["offset"][0]; got != "10" {
+		t.Fatalf("expected offset 10, got %q", got)
 	}
 }
