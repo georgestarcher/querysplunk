@@ -78,7 +78,7 @@ Required environment variables for integration runs:
 
 - `SPLUNKBASEURL`
 - either `SPLUNKTOKEN` or both `SPLUNKUSERNAME` and `SPLUNKPASSWORD`
-- optional: `SPLUNKTLSVERIFY`, `SPLUNKTIMEOUT`
+- optional: `SPLUNKTLSVERIFY`, `SPLUNKTIMEOUT`, `SPLUNKAPP`
 
 ### GitHub Actions integration workflow
 
@@ -100,6 +100,7 @@ Create these secrets in your repository for the integration step:
 - `SPLUNKPASSWORD`
 - `SPLUNKTLSVERIFY`
 - `SPLUNKTIMEOUT`
+- `SPLUNKAPP`
 - `SPLUNK_INTEGRATION_QUERY`
 
 `SPLUNK_INTEGRATION_QUERY` is optional; the default query is:

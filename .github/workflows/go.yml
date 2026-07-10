@@ -10,6 +10,7 @@
 #   - SPLUNKPASSWORD
 #   - SPLUNKTLSVERIFY
 #   - SPLUNKTIMEOUT
+#   - SPLUNKAPP
 #   - SPLUNK_INTEGRATION_QUERY (optional; defaults to: search index=_internal | head 1)
 
 name: Go
@@ -118,6 +119,7 @@ jobs:
           SPLUNKTOKEN: ${{ secrets.SPLUNKTOKEN }}
           SPLUNKTLSVERIFY: ${{ secrets.SPLUNKTLSVERIFY }}
           SPLUNKTIMEOUT: ${{ secrets.SPLUNKTIMEOUT }}
+          SPLUNKAPP: ${{ secrets.SPLUNKAPP }}
           SPLUNK_INTEGRATION_QUERY: ${{ secrets.SPLUNK_INTEGRATION_QUERY }}
         working-directory: splunk
         run: go test -tags integration ./...
