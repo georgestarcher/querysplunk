@@ -2,7 +2,7 @@ app: search
 output_file: scheduler-health.json
 mode: job
 search: |
-  index=_internal earliest=-24h sourcetype=scheduler
+  search index=_internal earliest=-24h sourcetype=scheduler
   | stats count by status savedsearch_name app user
   | sort - count
 dispatch:
