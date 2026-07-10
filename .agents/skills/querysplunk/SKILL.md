@@ -14,6 +14,8 @@ It does not store credentials in YAML. Splunk connection settings must come from
 - Never add secrets to YAML configs.
 - Warn before running a search that has no apparent `earliest` or `latest` time bounds.
 - Prefer bounded searches using SPL time modifiers or YAML `dispatch.earliest_time` and `dispatch.latest_time`.
+- Expect querysplunk to block `earliest` values older than one year unless `-allow-old-earliest` or YAML `safety.allow_old_earliest` is set.
+- Expect querysplunk to block explicit `index=*` searches unless `-allow-index-wildcard` or YAML `safety.allow_index_wildcard` is set.
 - Treat Splunk Cloud REST endpoint restrictions as possible permission or deployment constraints, not automatically as querysplunk bugs.
 - Do not run destructive or modifying SPL unless the user explicitly asks and confirms the risk.
 - Summarize result files carefully; avoid dumping large raw output into chat.
@@ -53,7 +55,7 @@ querysplunk -config examples/health/splunkd-health.yml
 ## Workflow for user-provided YAML
 
 1. Check that the YAML file exists.
-2. Read the YAML enough to identify `search`, `output_file`, `mode`, dispatch bounds, and diagnostics settings.
+2. Read the YAML enough to identify `search`, `output_file`, `mode`, `safety`, dispatch bounds, and diagnostics settings.
 3. Confirm there are no obvious secrets in the YAML.
 4. Warn if the search appears unbounded.
 5. Run `querysplunk -config <file>`.
