@@ -16,19 +16,10 @@ run:
 build_and_run: build run
 
 package:
-	rm -rf build ${BUILD_DIR}
-	mkdir -p build ${BUILD_DIR}
-	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o build/${BINARY_NAME}-${VERSION}-darwin-amd64 .
-	tar -C build -czf ${BUILD_DIR}/${BINARY_NAME}-${VERSION}-darwin-amd64.tar.gz ${BINARY_NAME}-${VERSION}-darwin-amd64
-	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o build/${BINARY_NAME}-${VERSION}-darwin-arm64 .
-	tar -C build -czf ${BUILD_DIR}/${BINARY_NAME}-${VERSION}-darwin-arm64.tar.gz ${BINARY_NAME}-${VERSION}-darwin-arm64
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o build/${BINARY_NAME}-${VERSION}-linux-amd64 .
-	tar -C build -czf ${BUILD_DIR}/${BINARY_NAME}-${VERSION}-linux-amd64.tar.gz ${BINARY_NAME}-${VERSION}-linux-amd64
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o build/${BINARY_NAME}-${VERSION}-linux-arm64 .
-	tar -C build -czf ${BUILD_DIR}/${BINARY_NAME}-${VERSION}-linux-arm64.tar.gz ${BINARY_NAME}-${VERSION}-linux-arm64
-	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o build/${BINARY_NAME}-${VERSION}-windows-amd64.exe .
-	zip -j ${BUILD_DIR}/${BINARY_NAME}-${VERSION}-windows-amd64.zip build/${BINARY_NAME}-${VERSION}-windows-amd64.exe
-	(cd ${BUILD_DIR} && shasum -a 256 * > checksums.txt)
+	scripts/package-release.sh ${VERSION} ${BINARY_NAME} ${BUILD_DIR}
+
+verify-package:
+	scripts/verify-package-contents.sh ${BUILD_DIR}
 
 clean:
 	go clean
