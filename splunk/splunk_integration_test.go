@@ -23,7 +23,14 @@ func TestDispatchQueryIntegration(t *testing.T) {
 	appContext := strings.TrimSpace(os.Getenv("SPLUNKAPP"))
 	queryString := os.Getenv("SPLUNK_INTEGRATION_QUERY")
 	if queryString == "" {
-		queryString = "search index=_internal | head 1"
+		exampleQuery, err := os.ReadFile("../query.txt")
+		if err != nil {
+			t.Fatalf("read example query.txt: %v", err)
+		}
+		queryString = string(exampleQuery)
+		if strings.TrimSpace(queryString) == "" {
+			t.Fatal("example query.txt is empty")
+		}
 	}
 	t.Logf("testing Splunk integration with base URL %s", safeURLForLog(baseURL))
 
@@ -78,5 +85,21 @@ func TestDispatchQueryIntegration(t *testing.T) {
 	}
 	if len(data) == 0 {
 		t.Fatalf("expected non-empty query output")
+	}
+	if query.Job.Sid == "" {
+		t.Fatal("expected dispatched query to have a search job id")
+	}
+	if !query.SearchLogRead {
+		t.Fatal("expected integration test to fetch search.log for the search job")
+	}
+	t.Logf("search job id: %s", query.Job.Sid)
+	if query.LogDiagnostics.ExecutionDuration != "" {
+		t.Logf("search execution duration from search.log: %s", query.LogDiagnostics.ExecutionDuration)
+	}
+	for _, warning := range query.LogDiagnostics.Warnings {
+		t.Logf("search.log warning: %s", warning)
+	}
+	for _, diagnosticError := range query.LogDiagnostics.Errors {
+		t.Logf("search.log error: %s", diagnosticError)
 	}
 }

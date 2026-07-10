@@ -9,9 +9,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -25,6 +27,7 @@ type SplunkConnection struct {
 	AuthToken                   string
 	TLSVerify                   bool
 	Timeout                     time.Duration
+	PollInterval                time.Duration
 }
 
 type SessionKey struct {
@@ -38,67 +41,50 @@ type SplunkJob struct {
 }
 
 type SplunkQuery struct {
-	Query   string
-	Job     SplunkJob
-	State   string
-	Results []byte
+	Query          string
+	Job            SplunkJob
+	State          string
+	Results        []byte
+	LogDiagnostics JobLogDiagnostics
+	SearchLogRead  bool
 }
 
 type SplunkJobStatus struct {
-	XMLName    xml.Name `xml:"entry"`
-	Text       string   `xml:",chardata"`
-	Xmlns      string   `xml:"xmlns,attr"`
-	S          string   `xml:"s,attr"`
-	Opensearch string   `xml:"opensearch,attr"`
-	Title      string   `xml:"title"`
-	ID         string   `xml:"id"`
-	Updated    string   `xml:"updated"`
-	Link       []struct {
-		Text string `xml:",chardata"`
-		Href string `xml:"href,attr"`
-		Rel  string `xml:"rel,attr"`
-	} `xml:"link"`
-	Published string `xml:"published"`
-	Author    struct {
-		Text string `xml:",chardata"`
-		Name string `xml:"name"`
-	} `xml:"author"`
-	Content struct {
-		Text string `xml:",chardata"`
-		Type string `xml:"type,attr"`
-		Dict struct {
-			Key []struct {
-				Text string `xml:",chardata"`
-				Name string `xml:"name,attr"`
-				Dict struct {
-					Text string `xml:",chardata"`
-					Key  []struct {
-						Text string `xml:",chardata"`
-						Name string `xml:"name,attr"`
-						Dict struct {
-							Text string `xml:",chardata"`
-							Key  []struct {
-								Text string `xml:",chardata"`
-								Name string `xml:"name,attr"`
-								List struct {
-									Text string `xml:",chardata"`
-									Item string `xml:"item"`
-								} `xml:"list"`
-							} `xml:"key"`
-						} `xml:"dict"`
-					} `xml:"key"`
-				} `xml:"dict"`
-				List string `xml:"list"`
-			} `xml:"key"`
-		} `xml:"dict"`
-	} `xml:"content"`
+	Entry []struct {
+		Content map[string]any `json:"content"`
+	} `json:"entry"`
+}
+
+type JobLogDiagnostics struct {
+	ExecutionDuration string
+	Warnings          []string
+	Errors            []string
 }
 
 const (
-	dispatchStateDone      = "DONE"
-	dispatchStateFailed    = "FAILED"
-	dispatchStateCancelled = "CANCELLED"
-	pollInterval           = time.Second
+	dispatchStateDone           = "DONE"
+	dispatchStateFailed         = "FAILED"
+	dispatchStateCancelled      = "CANCELLED"
+	dispatchStateInternalCancel = "INTERNAL_CANCEL"
+	dispatchStateUserCancel     = "USER_CANCEL"
+	dispatchStateBadInputCancel = "BAD_INPUT_CANCEL"
+	dispatchStateQuit           = "QUIT"
+	dispatchStatePause          = "PAUSE"
+	dispatchStatePaused         = "PAUSED"
+	defaultPollInterval         = time.Second
+	cancelTimeout               = 10 * time.Second
+	maxDiagnosticLines          = 20
+	maxDiagnosticLineLength     = 500
+)
+
+var durationPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)\b(?:execution[_ ]?time|run[_ ]?duration|run[_ ]?time|total[_ ]?run[_ ]?time|elapsed(?:[_ ]?time)?|duration)\b[=:\s]+([0-9]+(?:\.[0-9]+)?\s*(?:seconds|second|secs|sec|minutes|minute|mins|min|ms|s|m)?)`),
+	regexp.MustCompile(`(?i)\bcompleted\s+in\s+([0-9]+(?:\.[0-9]+)?\s*(?:seconds|second|secs|sec|minutes|minute|mins|min|ms|s|m))`),
+}
+
+var (
+	errorLogLevelPattern = regexp.MustCompile(`(?i)(?:^|\s)(?:ERROR|FATAL)(?:\s|$|:)`)
+	warnLogLevelPattern  = regexp.MustCompile(`(?i)(?:^|\s)WARN(?:ING)?(?:\s|$|:)`)
 )
 
 // Web Methods
@@ -250,18 +236,32 @@ func (conn SplunkConnection) jobURL(query *SplunkQuery) string {
 	return fmt.Sprintf("%s/services/search/jobs/%s", conn.BaseURL, query.Job.Sid)
 }
 
+func (conn SplunkConnection) pollInterval() time.Duration {
+	if conn.PollInterval > 0 {
+		return conn.PollInterval
+	}
+	return defaultPollInterval
+}
+
 // Check on job status until terminal state or context deadline.
 func (conn SplunkConnection) jobStatus(ctx context.Context, query *SplunkQuery) error {
 	data := make(url.Values)
 	data = conn.namespaceValues(data)
+	data.Add("output_mode", "json")
 	query.State = "DISPATCHED"
-	ticker := time.NewTicker(pollInterval)
+	ticker := time.NewTicker(conn.pollInterval())
 	defer ticker.Stop()
+	lastLoggedState := ""
 
 	for {
 		select {
 		case <-ctx.Done():
 			query.State = "CANCELLED"
+			if query.Job.Sid != "" {
+				if err := conn.cancelJob(query); err != nil {
+					log.Printf("WARN: could not cancel Splunk search job %s after local context ended: %v", query.Job.Sid, err)
+				}
+			}
 			return ctx.Err()
 		case <-ticker.C:
 		}
@@ -272,25 +272,108 @@ func (conn SplunkConnection) jobStatus(ctx context.Context, query *SplunkQuery) 
 			return err
 		}
 
-		var jobStatus SplunkJobStatus
-		if err := xml.Unmarshal([]byte(response), &jobStatus); err != nil {
+		status, err := parseJobStatus(response)
+		if err != nil {
 			query.State = "ERROR"
 			return err
 		}
 
-		for _, v := range jobStatus.Content.Dict.Key {
-			if v.Name != "dispatchState" {
-				continue
-			}
-			query.State = v.Text
-			switch query.State {
-			case dispatchStateDone:
-				return nil
-			case dispatchStateFailed, dispatchStateCancelled:
-				return fmt.Errorf("splunk job ended in %s state", query.State)
-			}
+		if status.DispatchState == "" {
+			continue
+		}
+		query.State = status.DispatchState
+		if query.State != lastLoggedState {
+			logJobProgress(query.Job.Sid, status)
+			lastLoggedState = query.State
+		}
+		if query.State == dispatchStateDone {
+			return nil
+		}
+		if isTerminalErrorState(query.State) {
+			return fmt.Errorf("splunk job ended in %s state", query.State)
 		}
 	}
+}
+
+type jobStatusContent struct {
+	DispatchState string
+	DoneProgress  string
+	ScanCount     string
+	EventCount    string
+	ResultCount   string
+}
+
+func parseJobStatus(response string) (jobStatusContent, error) {
+	var payload SplunkJobStatus
+	if err := json.Unmarshal([]byte(response), &payload); err != nil {
+		return jobStatusContent{}, err
+	}
+	if len(payload.Entry) == 0 {
+		return jobStatusContent{}, nil
+	}
+
+	content := payload.Entry[0].Content
+	return jobStatusContent{
+		DispatchState: stringValue(content["dispatchState"]),
+		DoneProgress:  stringValue(content["doneProgress"]),
+		ScanCount:     stringValue(content["scanCount"]),
+		EventCount:    stringValue(content["eventCount"]),
+		ResultCount:   stringValue(content["resultCount"]),
+	}, nil
+}
+
+func stringValue(value any) string {
+	switch typedValue := value.(type) {
+	case string:
+		return typedValue
+	case float64:
+		return fmt.Sprintf("%g", typedValue)
+	case bool:
+		return fmt.Sprintf("%t", typedValue)
+	default:
+		return ""
+	}
+}
+
+func isTerminalErrorState(state string) bool {
+	switch state {
+	case dispatchStateFailed, dispatchStateCancelled, dispatchStateInternalCancel, dispatchStateUserCancel, dispatchStateBadInputCancel, dispatchStateQuit, dispatchStatePause, dispatchStatePaused:
+		return true
+	default:
+		return false
+	}
+}
+
+func logJobProgress(sid string, status jobStatusContent) {
+	var details []string
+	if status.DoneProgress != "" {
+		details = append(details, "doneProgress="+status.DoneProgress)
+	}
+	if status.ScanCount != "" {
+		details = append(details, "scanCount="+status.ScanCount)
+	}
+	if status.EventCount != "" {
+		details = append(details, "eventCount="+status.EventCount)
+	}
+	if status.ResultCount != "" {
+		details = append(details, "resultCount="+status.ResultCount)
+	}
+	if len(details) == 0 {
+		log.Printf("INFO: Splunk search job %s state=%s", sid, status.DispatchState)
+		return
+	}
+	log.Printf("INFO: Splunk search job %s state=%s %s", sid, status.DispatchState, strings.Join(details, " "))
+}
+
+func (conn SplunkConnection) cancelJob(query *SplunkQuery) error {
+	ctx, cancel := context.WithTimeout(context.Background(), cancelTimeout)
+	defer cancel()
+
+	data := make(url.Values)
+	data = conn.namespaceValues(data)
+	data.Add("action", "cancel")
+	_, err := conn.httpPost(ctx, fmt.Sprintf("%s/control", conn.jobURL(query)), &data)
+	return err
 }
 
 // Write results bytes to file as unmodified JSON.
@@ -316,6 +399,87 @@ func (conn SplunkConnection) jobResults(ctx context.Context, query *SplunkQuery)
 	return nil
 }
 
+func (conn SplunkConnection) jobSearchLog(ctx context.Context, query *SplunkQuery) (string, error) {
+	if query.Job.Sid == "" {
+		return "", errors.New("cannot fetch search log without job sid")
+	}
+
+	data := make(url.Values)
+	data = conn.namespaceValues(data)
+
+	response, err := conn.httpGet(ctx, fmt.Sprintf("%s/search.log", conn.jobURL(query)), &data)
+	if err != nil {
+		return "", err
+	}
+	return response, nil
+}
+
+func AnalyzeJobLog(searchLog string) JobLogDiagnostics {
+	diagnostics := JobLogDiagnostics{}
+	for _, line := range strings.Split(searchLog, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		if diagnostics.ExecutionDuration == "" {
+			for _, pattern := range durationPatterns {
+				matches := pattern.FindStringSubmatch(line)
+				if len(matches) > 1 {
+					diagnostics.ExecutionDuration = matches[1]
+					break
+				}
+			}
+		}
+
+		if errorLogLevelPattern.MatchString(line) {
+			diagnostics.Errors = appendBoundedLine(diagnostics.Errors, line)
+			continue
+		}
+		if warnLogLevelPattern.MatchString(line) {
+			diagnostics.Warnings = appendBoundedLine(diagnostics.Warnings, line)
+		}
+	}
+	return diagnostics
+}
+
+func appendBoundedLine(lines []string, line string) []string {
+	if len(lines) >= maxDiagnosticLines {
+		return lines
+	}
+	if len(line) > maxDiagnosticLineLength {
+		line = line[:maxDiagnosticLineLength] + "... [truncated]"
+	}
+	return append(lines, line)
+}
+
+func logDiagnostics(diagnostics JobLogDiagnostics) {
+	if diagnostics.ExecutionDuration != "" {
+		log.Printf("INFO: Splunk search execution duration: %s", diagnostics.ExecutionDuration)
+	}
+	for _, warning := range diagnostics.Warnings {
+		log.Printf("WARN: Splunk search log warning: %s", warning)
+	}
+	for _, diagnosticError := range diagnostics.Errors {
+		log.Printf("WARN: Splunk search log error: %s", diagnosticError)
+	}
+}
+
+func (conn SplunkConnection) collectJobLogDiagnostics(ctx context.Context, query *SplunkQuery) {
+	if query.Job.Sid == "" {
+		return
+	}
+
+	searchLog, err := conn.jobSearchLog(ctx, query)
+	if err != nil {
+		log.Printf("WARN: could not fetch Splunk search log for job %s: %v", query.Job.Sid, err)
+		return
+	}
+	query.SearchLogRead = true
+	query.LogDiagnostics = AnalyzeJobLog(searchLog)
+	logDiagnostics(query.LogDiagnostics)
+}
+
 // Dispatch Splunk Query: Main Entry Method.
 func (conn SplunkConnection) DispatchQuery(ctx context.Context, query *SplunkQuery, outputfile string) error {
 	data := make(url.Values)
@@ -336,13 +500,19 @@ func (conn SplunkConnection) DispatchQuery(ctx context.Context, query *SplunkQue
 	if query.Job.Sid == "" {
 		return fmt.Errorf("empty job sid in response")
 	}
+	log.Printf("INFO: Dispatched Splunk search job %s", query.Job.Sid)
 
 	if err = conn.jobStatus(ctx, query); err != nil {
+		diagnosticCtx, cancel := context.WithTimeout(context.Background(), cancelTimeout)
+		defer cancel()
+		conn.collectJobLogDiagnostics(diagnosticCtx, query)
 		return err
 	}
 	if query.State != dispatchStateDone {
+		conn.collectJobLogDiagnostics(ctx, query)
 		return fmt.Errorf("unexpected job terminal state: %s", query.State)
 	}
+	conn.collectJobLogDiagnostics(ctx, query)
 
 	if err = conn.jobResults(ctx, query); err != nil {
 		return err

@@ -30,7 +30,7 @@ SPLUNKAPP=
 
 * You can use credentials or a Splunk Authentication token. If you use SPLUNKTOKEN it will ignore the credentials or lack of them.
 * You can set SPLUNKTLSVERIFY to false to avoid validating a Splunk TLS Certificate. If not set, TLS verification defaults to true.
-* SPLUNKTIMEOUT will default to 120 seconds if not specified. This is the max time the program will keep checking for the dispatched query to reach a DONE state.
+* SPLUNKTIMEOUT will default to 120 seconds if not specified. This is the max time the program will keep checking for the dispatched query to reach a DONE state. If the local timeout expires after a search job has been created, the tool attempts to cancel the remote Splunk job before exiting.
 * Use `SPLUNKAPP` (or `-app`) to scope the search to a Splunk app namespace.
 
 ## SPL query file
@@ -45,6 +45,40 @@ Bonus that this method of calling a savedsearch works great from SOAR products o
 ```
 savedsearch "SOAR - Auth Model - Investigation" user=bob
 ```
+
+## Search job lifecycle and diagnostics
+
+The tool dispatches searches as Splunk search jobs and polls the job until it
+reaches a terminal state.
+
+Successful terminal state:
+
+- `DONE`
+
+Failure terminal states are reported as errors, including:
+
+- `FAILED`
+- `CANCELLED`
+- `INTERNAL_CANCEL`
+- `USER_CANCEL`
+- `BAD_INPUT_CANCEL`
+- `QUIT`
+- `PAUSE`
+- `PAUSED`
+
+While polling, the tool logs job state changes and includes available progress
+fields such as `doneProgress`, `scanCount`, `eventCount`, and `resultCount`.
+
+After a Splunk job ID exists, the tool can fetch the raw job log text from:
+
+```text
+/services/search/jobs/{sid}/search.log
+```
+
+The search log is analyzed for execution duration and warning/error lines.
+Warnings and errors found in `search.log` are logged even if Splunk reports the
+job state as `DONE`, because the job can complete with useful non-fatal
+diagnostics. Large diagnostic output is bounded before being written to logs.
 
 ## Usage
 
