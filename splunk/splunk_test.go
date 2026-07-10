@@ -29,6 +29,50 @@ func TestHTTPCallReturnsErrorOnNon2xx(t *testing.T) {
 	if !strings.Contains(err.Error(), "502") {
 		t.Fatalf("expected status code in error, got %v", err)
 	}
+	if !strings.Contains(err.Error(), "scheme=http") {
+		t.Fatalf("expected sanitized URL in error, got %v", err)
+	}
+}
+
+func TestSafeURLForLogRemovesSensitiveURLParts(t *testing.T) {
+	got := safeURLForLog("https://user:pass@splunk.example.com:8089/services/search/jobs/?token=secret")
+	want := "scheme=https host=splunk.example.com:8089 path=/services/search/jobs/"
+	if got != want {
+		t.Fatalf("expected %q, got %q", want, got)
+	}
+	if strings.Contains(got, "user") || strings.Contains(got, "pass") || strings.Contains(got, "token") || strings.Contains(got, "secret") {
+		t.Fatalf("sanitized URL leaked sensitive content: %q", got)
+	}
+}
+
+func TestLoginValidatesAuthTokenWithCurrentContext(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/services/authentication/current-context" {
+			t.Fatalf("expected current-context auth check, got path %q", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer token" {
+			t.Fatalf("expected bearer token auth header, got %q", got)
+		}
+		if got := r.URL.Query().Get("output_mode"); got != "json" {
+			t.Fatalf("expected output_mode=json, got %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, err := w.Write([]byte(`{"entry":[]}`))
+		if err != nil {
+			t.Fatalf("unexpected write error: %v", err)
+		}
+	}))
+	defer ts.Close()
+
+	conn := SplunkConnection{
+		AuthToken: "token",
+		BaseURL:   ts.URL,
+		Timeout:   5 * time.Second,
+	}
+
+	if err := conn.Login(context.Background()); err != nil {
+		t.Fatalf("expected auth validation success, got %v", err)
+	}
 }
 
 func TestDispatchQueryReturnsErrorOnMalformedJobResponse(t *testing.T) {
@@ -109,6 +153,70 @@ func TestDispatchQueryWritesResultsOnDone(t *testing.T) {
 	}
 	if strings.TrimSpace(string(actual)) != resultsPayload {
 		t.Fatalf("unexpected output file contents: %q", string(actual))
+	}
+}
+
+func TestDispatchQuerySendsNamespaceWhenSet(t *testing.T) {
+	sid := "sid-app"
+	resultsPayload := `{"results": []}`
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/services/search/jobs/":
+			if err := r.ParseForm(); err != nil {
+				t.Fatalf("unexpected parse error: %v", err)
+			}
+			if got := r.FormValue("namespace"); got != "security" {
+				t.Fatalf("expected namespace 'security', got %q", got)
+			}
+			w.Header().Set("Content-Type", "application/xml")
+			response := `<response><sid>` + sid + `</sid></response>`
+			_, err := w.Write([]byte(response))
+			if err != nil {
+				t.Fatalf("unexpected write error: %v", err)
+			}
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/services/search/jobs/"+sid):
+			if err := r.ParseForm(); err != nil {
+				t.Fatalf("unexpected parse error: %v", err)
+			}
+			if got := r.FormValue("namespace"); got != "security" {
+				t.Fatalf("expected namespace 'security', got %q", got)
+			}
+			w.Header().Set("Content-Type", "application/xml")
+			response := `<entry><content><dict><key name="dispatchState">DONE</key></dict></content></entry>`
+			_, err := w.Write([]byte(response))
+			if err != nil {
+				t.Fatalf("unexpected write error: %v", err)
+			}
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/services/search/jobs/"+sid+"/results/"):
+			if err := r.ParseForm(); err != nil {
+				t.Fatalf("unexpected parse error: %v", err)
+			}
+			if got := r.FormValue("namespace"); got != "security" {
+				t.Fatalf("expected namespace 'security', got %q", got)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, err := w.Write([]byte(resultsPayload))
+			if err != nil {
+				t.Fatalf("unexpected write error: %v", err)
+			}
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer ts.Close()
+
+	conn := SplunkConnection{
+		AuthToken:  "token",
+		BaseURL:    ts.URL,
+		AppContext: "security",
+		Timeout:    5 * time.Second,
+	}
+	query := SplunkQuery{Query: "search index=_internal | head 1"}
+	output := t.TempDir() + "/out.json"
+
+	err := conn.DispatchQuery(context.Background(), &query, output)
+	if err != nil {
+		t.Fatalf("expected success, got %v", err)
 	}
 }
 

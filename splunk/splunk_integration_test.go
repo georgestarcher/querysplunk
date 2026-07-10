@@ -20,10 +20,12 @@ func TestDispatchQueryIntegration(t *testing.T) {
 	username := os.Getenv("SPLUNKUSERNAME")
 	password := os.Getenv("SPLUNKPASSWORD")
 	token := os.Getenv("SPLUNKTOKEN")
+	appContext := strings.TrimSpace(os.Getenv("SPLUNKAPP"))
 	queryString := os.Getenv("SPLUNK_INTEGRATION_QUERY")
 	if queryString == "" {
 		queryString = "search index=_internal | head 1"
 	}
+	t.Logf("testing Splunk integration with base URL %s", safeURLForLog(baseURL))
 
 	if token == "" && (username == "" || password == "") {
 		t.Skip("provide either SPLUNKTOKEN or both SPLUNKUSERNAME and SPLUNKPASSWORD")
@@ -48,12 +50,13 @@ func TestDispatchQueryIntegration(t *testing.T) {
 	}
 
 	conn := SplunkConnection{
-		Username:  username,
-		Password:  password,
-		AuthToken: token,
-		BaseURL:   baseURL,
-		TLSVerify: tlsVerify,
-		Timeout:   timeout,
+		AppContext: appContext,
+		Username:   username,
+		Password:   password,
+		AuthToken:  token,
+		BaseURL:    baseURL,
+		TLSVerify:  tlsVerify,
+		Timeout:    timeout,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)

@@ -11,8 +11,8 @@ import (
 	"time"
 
 	// import for the .env file support
+	"github.com/georgestarcher/querysplunk/splunk"
 	"github.com/joho/godotenv"
-	"splunk"
 )
 
 // setup more standard logging format
@@ -65,13 +65,15 @@ func main() {
 	var queryFile string
 	var outputFile string
 	var useEnvFile bool
+	var appContext string
 
 	log.SetFlags(0)
 	log.SetOutput(new(logWriter))
 
 	flag.BoolVar(&useEnvFile, "e", false, "Use .env file")
-	flag.StringVar(&queryFile, "q", "query.txt", "Enter the filename of the Query")
-	flag.StringVar(&outputFile, "o", "splunkresults.json", "Enter the filename to save results")
+	flag.StringVar(&appContext, "app", "", "Splunk app context (namespace) for query execution")
+	flag.StringVar(&queryFile, "q", "query.txt", "Read the SPL search from this file")
+	flag.StringVar(&outputFile, "o", "splunkresults.json", "Write Splunk results to this JSON file")
 	flag.Parse()
 
 	if useEnvFile {
@@ -79,6 +81,11 @@ func main() {
 			log.Fatal("ERROR: could not load .env file")
 		}
 	}
+
+	if appContext == "" {
+		appContext = os.Getenv("SPLUNKAPP")
+	}
+	appContext = strings.TrimSpace(appContext)
 
 	fileContent, err := os.ReadFile(queryFile)
 	if err != nil {
@@ -112,12 +119,13 @@ func main() {
 	defer cancel()
 
 	conn := splunk.SplunkConnection{
-		Username:  username,
-		Password:  password,
-		AuthToken: splunkToken,
-		BaseURL:   baseURL,
-		TLSVerify: tlsVerify,
-		Timeout:   timeout,
+		AppContext: appContext,
+		Username:   username,
+		Password:   password,
+		AuthToken:  splunkToken,
+		BaseURL:    baseURL,
+		TLSVerify:  tlsVerify,
+		Timeout:    timeout,
 	}
 
 	if err = conn.Login(ctx); err != nil {
