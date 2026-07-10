@@ -113,3 +113,33 @@ Optional environment secrets:
 
 You can also pass integration values through the normal environment path as
 an alternative to repository secrets.
+
+## Release
+
+Releases are built by GitHub Actions when a version tag is pushed.
+
+Before tagging, merge the release branch to `main` and make sure the `Go`
+workflow passes. To create a release:
+
+```bash
+git checkout main
+git pull
+git tag v1.1.0
+git push origin v1.1.0
+```
+
+The `Release` workflow builds these assets and uploads them to the GitHub
+release:
+
+- `splunkquery-vX.Y.Z-darwin-amd64`
+- `splunkquery-vX.Y.Z-darwin-arm64`
+- `splunkquery-vX.Y.Z-linux-amd64`
+- `splunkquery-vX.Y.Z-linux-arm64`
+- `splunkquery-vX.Y.Z-windows-amd64.exe`
+- `checksums.txt`
+
+For local release-style builds, run:
+
+```bash
+make clean build
+```

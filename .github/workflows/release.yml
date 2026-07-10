@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.5"
+          check-latest: true
+          cache: true
+
+      - name: Test
+        run: |
+          go test ./...
+          (cd splunk && go test ./...)
+
+      - name: Build release assets
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+
+          build() {
+            local goos="$1"
+            local goarch="$2"
+            local ext="${3:-}"
+            local output="dist/splunkquery-${VERSION}-${goos}-${goarch}${ext}"
+            CGO_ENABLED=0 GOOS="${goos}" GOARCH="${goarch}" go build -trimpath -ldflags="-s -w" -o "${output}" .
+          }
+
+          build darwin amd64
+          build darwin arm64
+          build linux amd64
+          build linux arm64
+          build windows amd64 .exe
+
+          (cd dist && sha256sum * > checksums.txt)
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" dist/* --title "${GITHUB_REF_NAME}" --generate-notes

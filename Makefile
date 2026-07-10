@@ -1,19 +1,19 @@
 BINARY_NAME=splunkquery
-SOURCE_NAME=main.go
 BUILD_DIR=dist
 
 build:
-	GOARCH=amd64 GOOS=darwin go build -o ${BUILD_DIR}/${BINARY_NAME}-darwin ${SOURCE_NAME}
-	GOARCH=amd64 GOOS=linux go build -o ${BUILD_DIR}/${BINARY_NAME}-linux ${SOURCE_NAME}
-	GOARCH=amd64 GOOS=windows go build -o ${BUILD_DIR}/${BINARY_NAME}-windows.exe ${SOURCE_NAME}
+	mkdir -p ${BUILD_DIR}
+	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -o ${BUILD_DIR}/${BINARY_NAME}-darwin-amd64 .
+	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -o ${BUILD_DIR}/${BINARY_NAME}-darwin-arm64 .
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o ${BUILD_DIR}/${BINARY_NAME}-linux-amd64 .
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -o ${BUILD_DIR}/${BINARY_NAME}-linux-arm64 .
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -o ${BUILD_DIR}/${BINARY_NAME}-windows-amd64.exe .
 
 run:
-	${BUILD_DIR}/${BINARY_NAME}-darwin
+	${BUILD_DIR}/${BINARY_NAME}-darwin-arm64
 
 build_and_run: build run
 
 clean:
 	go clean
-	rm ${BUILD_DIR}/${BINARY_NAME}-darwin
-	rm ${BUILD_DIR}/${BINARY_NAME}-linux
-	rm ${BUILD_DIR}/${BINARY_NAME}-windows.exe
+	rm -rf ${BUILD_DIR}
