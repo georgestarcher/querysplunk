@@ -110,6 +110,16 @@ func TestReadSearchFile(t *testing.T) {
 	}
 }
 
+func TestDefaultQueryFileIsReadable(t *testing.T) {
+	got, err := readSearchFile("query.txt")
+	if err != nil {
+		t.Fatalf("read default query file: %v", err)
+	}
+	if got == "" {
+		t.Fatal("expected default query file to be non-empty")
+	}
+}
+
 func TestReadSearchFileRejectsEmptySearch(t *testing.T) {
 	queryFile := t.TempDir() + "/empty.spl"
 	if err := os.WriteFile(queryFile, []byte(" \n\t"), 0644); err != nil {
