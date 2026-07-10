@@ -112,6 +112,70 @@ func TestDispatchQueryWritesResultsOnDone(t *testing.T) {
 	}
 }
 
+func TestDispatchQuerySendsNamespaceWhenSet(t *testing.T) {
+	sid := "sid-app"
+	resultsPayload := `{"results": []}`
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/services/search/jobs/":
+			if err := r.ParseForm(); err != nil {
+				t.Fatalf("unexpected parse error: %v", err)
+			}
+			if got := r.FormValue("namespace"); got != "security" {
+				t.Fatalf("expected namespace 'security', got %q", got)
+			}
+			w.Header().Set("Content-Type", "application/xml")
+			response := `<response><sid>` + sid + `</sid></response>`
+			_, err := w.Write([]byte(response))
+			if err != nil {
+				t.Fatalf("unexpected write error: %v", err)
+			}
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/services/search/jobs/"+sid):
+			if err := r.ParseForm(); err != nil {
+				t.Fatalf("unexpected parse error: %v", err)
+			}
+			if got := r.FormValue("namespace"); got != "security" {
+				t.Fatalf("expected namespace 'security', got %q", got)
+			}
+			w.Header().Set("Content-Type", "application/xml")
+			response := `<entry><content><dict><key name="dispatchState">DONE</key></dict></content></entry>`
+			_, err := w.Write([]byte(response))
+			if err != nil {
+				t.Fatalf("unexpected write error: %v", err)
+			}
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/services/search/jobs/"+sid+"/results/"):
+			if err := r.ParseForm(); err != nil {
+				t.Fatalf("unexpected parse error: %v", err)
+			}
+			if got := r.FormValue("namespace"); got != "security" {
+				t.Fatalf("expected namespace 'security', got %q", got)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, err := w.Write([]byte(resultsPayload))
+			if err != nil {
+				t.Fatalf("unexpected write error: %v", err)
+			}
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer ts.Close()
+
+	conn := SplunkConnection{
+		AuthToken:  "token",
+		BaseURL:    ts.URL,
+		AppContext: "security",
+		Timeout:    5 * time.Second,
+	}
+	query := SplunkQuery{Query: "search index=_internal | head 1"}
+	output := t.TempDir() + "/out.json"
+
+	err := conn.DispatchQuery(context.Background(), &query, output)
+	if err != nil {
+		t.Fatalf("expected success, got %v", err)
+	}
+}
+
 func TestDispatchQueryReturnsErrorOnResultFetchFailure(t *testing.T) {
 	sid := "sid-456"
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

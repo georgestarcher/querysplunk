@@ -20,6 +20,7 @@ import (
 
 type SplunkConnection struct {
 	Username, Password, BaseURL string
+	AppContext                  string
 	SessionKey                  SessionKey
 	AuthToken                   string
 	TLSVerify                   bool
@@ -122,7 +123,20 @@ func (conn SplunkConnection) httpCall(ctx context.Context, requestURL string, me
 	client := conn.httpClient()
 
 	var payload io.Reader
-	if data != nil {
+	if method == http.MethodGet && data != nil {
+		parsedURL, err := url.Parse(requestURL)
+		if err != nil {
+			return "", err
+		}
+		parsedQuery := parsedURL.Query()
+		for key, values := range *data {
+			for _, value := range values {
+				parsedQuery.Add(key, value)
+			}
+		}
+		parsedURL.RawQuery = parsedQuery.Encode()
+		requestURL = parsedURL.String()
+	} else if data != nil {
 		payload = bytes.NewBufferString(data.Encode())
 	}
 
@@ -205,6 +219,7 @@ func (conn SplunkConnection) jobURL(query *SplunkQuery) string {
 // Check on job status until terminal state or context deadline.
 func (conn SplunkConnection) jobStatus(ctx context.Context, query *SplunkQuery) error {
 	data := make(url.Values)
+	data = conn.namespaceValues(data)
 	query.State = "DISPATCHED"
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
@@ -253,6 +268,7 @@ func (conn SplunkConnection) writeResults(query *SplunkQuery, outputfile string)
 // Fetch job results.
 func (conn SplunkConnection) jobResults(ctx context.Context, query *SplunkQuery) error {
 	data := make(url.Values)
+	data = conn.namespaceValues(data)
 	data.Add("output_mode", "json")
 
 	url := fmt.Sprintf("%s/results/", conn.jobURL(query))
@@ -269,6 +285,7 @@ func (conn SplunkConnection) jobResults(ctx context.Context, query *SplunkQuery)
 // Dispatch Splunk Query: Main Entry Method.
 func (conn SplunkConnection) DispatchQuery(ctx context.Context, query *SplunkQuery, outputfile string) error {
 	data := make(url.Values)
+	data = conn.namespaceValues(data)
 	data.Add("search", query.Query)
 
 	response, err := conn.httpPost(ctx, fmt.Sprintf("%s/services/search/jobs/", conn.BaseURL), &data)
@@ -297,4 +314,15 @@ func (conn SplunkConnection) DispatchQuery(ctx context.Context, query *SplunkQue
 		return err
 	}
 	return conn.writeResults(query, outputfile)
+}
+
+func (conn SplunkConnection) namespaceValues(values url.Values) url.Values {
+	if values == nil {
+		values = make(url.Values)
+	}
+	trimmedAppContext := strings.TrimSpace(conn.AppContext)
+	if trimmedAppContext != "" {
+		values.Add("namespace", trimmedAppContext)
+	}
+	return values
 }

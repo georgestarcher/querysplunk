@@ -25,11 +25,13 @@ SPLUNKBASEURL=
 SPLUNKTOKEN=
 SPLUNKTIMEOUT=120
 SPLUNKTLSVERIFY=true
+SPLUNKAPP=
 ```
 
 * You can use credentials or a Splunk Authentication token. If you use SPLUNKTOKEN it will ignore the credentials or lack of them.
 * You can set SPLUNKTLSVERIFY to false to avoid validating a Splunk TLS Certificate. If not set, TLS verification defaults to true.
 * SPLUNKTIMEOUT will default to 120 seconds if not specified. This is the max time the program will keep checking for the dispatched query to reach a DONE state.
+* Use `SPLUNKAPP` (or `-app`) to scope the search to a Splunk app namespace.
 
 ## query.txt File:
 
@@ -56,6 +58,8 @@ Usage of ./splunkquery-darwin:
         Use .env file
   -o string
         Enter the filename to save results. (default "splunkresults.json")
+  -app string
+        Splunk app context (namespace) for query execution
   -q string
         Enter the filename of the Query. (default "query.txt")
 
