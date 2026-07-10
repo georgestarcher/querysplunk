@@ -158,6 +158,10 @@ If `diagnostics.search_log_file` is omitted for `save` or `both`, the tool
 derives a file name from the result output file, such as
 `splunkresults.search.log`.
 
+Example health-check configs are available in `examples/health/`. They include
+read-only `_internal` and Splunk REST health searches with notes about required
+permissions and Splunk Cloud caveats.
+
 ## Search job lifecycle and diagnostics
 
 The tool dispatches searches as Splunk search jobs and polls the job until it

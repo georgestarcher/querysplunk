@@ -1,0 +1,16 @@
+app: search
+output_file: license-warnings.json
+mode: job
+search: |
+  index=_internal earliest=-24h (component=LicenseUsage OR component=LicenseManager)
+  | stats count latest(_raw) as latest_message by host component log_level
+  | sort - count
+dispatch:
+  earliest_time: "-24h"
+  latest_time: "now"
+results:
+  endpoint: auto
+  output_mode: json
+  count: 0
+diagnostics:
+  search_log: summary

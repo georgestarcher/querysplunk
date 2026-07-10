@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -311,6 +312,34 @@ search: search index=_internal earliest=-15m | head 1
 	_, err := loadSearchConfig(configFile)
 	if err == nil {
 		t.Fatal("expected invalid execution mode error")
+	}
+}
+
+func TestHealthExampleConfigsLoad(t *testing.T) {
+	matches, err := filepath.Glob(filepath.Join("examples", "health", "*.yml"))
+	if err != nil {
+		t.Fatalf("glob health examples: %v", err)
+	}
+	if len(matches) == 0 {
+		t.Fatal("expected health example YAML files")
+	}
+
+	for _, path := range matches {
+		t.Run(filepath.Base(path), func(t *testing.T) {
+			config, err := loadSearchConfig(path)
+			if err != nil {
+				t.Fatalf("load health example config: %v", err)
+			}
+			if strings.TrimSpace(config.OutputFile) == "" {
+				t.Fatal("expected output_file")
+			}
+			if strings.TrimSpace(config.Mode) != "job" {
+				t.Fatalf("expected mode job, got %q", config.Mode)
+			}
+			if strings.TrimSpace(config.Results.OutputMode) != "json" {
+				t.Fatalf("expected results.output_mode json, got %q", config.Results.OutputMode)
+			}
+		})
 	}
 }
 

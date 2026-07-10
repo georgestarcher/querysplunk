@@ -1,0 +1,12 @@
+app: search
+output_file: disk-partitions.json
+mode: job
+search: |
+  | rest /services/server/status/partitions-space
+  | table title mount_point available capacity free total used
+results:
+  endpoint: auto
+  output_mode: json
+  count: 0
+diagnostics:
+  search_log: summary
