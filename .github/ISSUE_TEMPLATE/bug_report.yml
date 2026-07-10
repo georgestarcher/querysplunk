@@ -1,0 +1,58 @@
+name: Bug Report
+description: Report a bug in querysplunk.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What went wrong?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: Include the command, flags, query file shape, and relevant environment setup.
+      placeholder: |
+        1. Run ...
+        2. With ...
+        3. See ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: Include sanitized logs or errors. Do not include Splunk tokens, passwords, or secrets.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or Commit
+      description: Release version, commit SHA, or branch.
+  - type: dropdown
+    id: auth
+    attributes:
+      label: Splunk Authentication Mode
+      options:
+        - Token
+        - Username and password
+        - Not applicable
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Secret Safety
+      options:
+        - label: I have removed tokens, passwords, and sensitive Splunk data from this report.
+          required: true

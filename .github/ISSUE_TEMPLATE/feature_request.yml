@@ -1,0 +1,41 @@
+name: Feature Request
+description: Suggest an improvement for querysplunk.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or Use Case
+      description: What workflow or limitation should this improve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed Solution
+      description: What should change?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Optional. Any workaround or different design you considered?
+  - type: dropdown
+    id: splunk-impact
+    attributes:
+      label: Splunk Integration Impact
+      options:
+        - Changes live Splunk behavior
+        - Does not change live Splunk behavior
+        - Unsure
+  - type: dropdown
+    id: release-impact
+    attributes:
+      label: Release Impact
+      options:
+        - Should be included in release notes
+        - Internal-only change
+        - Unsure
