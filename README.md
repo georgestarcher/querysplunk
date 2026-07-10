@@ -115,6 +115,28 @@ If neither the SPL nor dispatch parameters include `earliest` / `latest` time
 bounds, the tool logs a warning. Existing unbounded searches still run, but
 Splunk REST searches can otherwise run over all time.
 
+By default, the tool blocks two high-impact search patterns before dispatch:
+
+- `earliest` values older than one year, whether supplied in SPL, YAML
+  `dispatch.earliest_time`, or the `-earliest` flag
+- explicit `index=*` searches
+
+These controls print a warning and stop the search. Use the override flags or
+YAML `safety` fields only when you intend the broader Splunk deployment impact:
+
+```bash
+querysplunk -q query.txt -allow-old-earliest
+querysplunk -q query.txt -allow-index-wildcard
+```
+
+For reusable YAML searches, set the acknowledgement with the search:
+
+```yaml
+safety:
+  allow_old_earliest: true
+  allow_index_wildcard: true
+```
+
 Example:
 
 ```yaml
@@ -138,6 +160,10 @@ results:
   output_mode: json
   count: 0
   offset: 0
+
+safety:
+  allow_old_earliest: false
+  allow_index_wildcard: false
 
 diagnostics:
   search_log: summary
@@ -261,7 +287,15 @@ Authentication and connection settings are read from environment variables:
 
 Use -e to load those values from .env in the working directory.
 
+Safety controls block earliest values older than one year and explicit index=*
+searches unless acknowledged with -allow-old-earliest, -allow-index-wildcard,
+or YAML safety.allow_old_earliest / safety.allow_index_wildcard.
+
 Options:
+  -allow-index-wildcard
+    	Allow searches that explicitly use index=*
+  -allow-old-earliest
+    	Allow earliest times older than the default one-year safety limit
   -app string
     	Override Splunk app context / namespace for the search
   -config string

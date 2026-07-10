@@ -218,6 +218,9 @@ results:
   output_mode: json
   count: 0
   offset: 10
+safety:
+  allow_old_earliest: true
+  allow_index_wildcard: true
 diagnostics:
   search_log: both
   search_log_file: search.log
@@ -250,6 +253,12 @@ diagnostics:
 	}
 	if config.Results.Endpoint != "auto" {
 		t.Fatalf("expected results endpoint auto, got %q", config.Results.Endpoint)
+	}
+	if !config.Safety.AllowOldEarliest {
+		t.Fatal("expected safety allow_old_earliest true")
+	}
+	if !config.Safety.AllowIndexWildcard {
+		t.Fatal("expected safety allow_index_wildcard true")
 	}
 	if config.Diagnostics.SearchLog != "both" {
 		t.Fatalf("expected diagnostics search_log both, got %q", config.Diagnostics.SearchLog)
@@ -410,5 +419,86 @@ func TestHasSearchTimeBounds(t *testing.T) {
 				t.Fatalf("expected %v, got %v", tc.want, got)
 			}
 		})
+	}
+}
+
+func TestSafetyViolationsBlocksOldEarliest(t *testing.T) {
+	now := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name     string
+		search   string
+		dispatch map[string][]string
+		want     bool
+	}{
+		{name: "spl older than one year", search: "search index=_internal earliest=-13mon | head 1", want: true},
+		{name: "dispatch older than one year", search: "search index=_internal | head 1", dispatch: map[string][]string{"earliest_time": {"-2y"}}, want: true},
+		{name: "absolute older than one year", search: "search index=_internal earliest=2025-07-09 | head 1", want: true},
+		{name: "within one year", search: "search index=_internal earliest=-12mon | head 1", want: false},
+		{name: "quoted within one year", search: `search index=_internal earliest="-30d" | head 1`, want: false},
+		{name: "unknown earliest syntax", search: "search index=_internal earliest=@d | head 1", want: false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := safetyViolations(tc.search, tc.dispatch, now, false, false)
+			hasViolation := len(got) > 0
+			if hasViolation != tc.want {
+				t.Fatalf("expected violation=%v, got %v (%#v)", tc.want, hasViolation, got)
+			}
+		})
+	}
+}
+
+func TestSafetyViolationsBlocksIndexWildcard(t *testing.T) {
+	now := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name   string
+		search string
+		want   bool
+	}{
+		{name: "bare wildcard", search: "search index=* earliest=-15m | head 1", want: true},
+		{name: "quoted wildcard", search: `search index="*" earliest=-15m | head 1`, want: true},
+		{name: "non-wildcard index", search: "search index=_internal earliest=-15m | head 1", want: false},
+		{name: "wildcard suffix is allowed", search: "search index=main* earliest=-15m | head 1", want: false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := safetyViolations(tc.search, nil, now, false, false)
+			hasViolation := len(got) > 0
+			if hasViolation != tc.want {
+				t.Fatalf("expected violation=%v, got %v (%#v)", tc.want, hasViolation, got)
+			}
+		})
+	}
+}
+
+func TestSafetyViolationOverrides(t *testing.T) {
+	now := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
+	search := "search index=* earliest=-2y | head 1"
+	if got := safetyViolations(search, nil, now, false, false); len(got) != 2 {
+		t.Fatalf("expected two safety violations, got %#v", got)
+	}
+	if got := safetyViolations(search, nil, now, true, false); len(got) != 1 || !strings.Contains(got[0], "index=*") {
+		t.Fatalf("expected only index wildcard violation, got %#v", got)
+	}
+	if got := safetyViolations(search, nil, now, true, true); len(got) != 0 {
+		t.Fatalf("expected overrides to allow search, got %#v", got)
+	}
+}
+
+func TestSafetyConfigOverrides(t *testing.T) {
+	now := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
+	config := searchConfig{
+		Search: "search index=* earliest=-2y | head 1",
+		Safety: safetyConfig{
+			AllowOldEarliest:   true,
+			AllowIndexWildcard: true,
+		},
+	}
+
+	got := safetyViolations(config.Search, nil, now, config.Safety.AllowOldEarliest, config.Safety.AllowIndexWildcard)
+	if len(got) != 0 {
+		t.Fatalf("expected YAML safety config to allow search, got %#v", got)
 	}
 }

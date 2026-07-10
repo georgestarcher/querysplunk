@@ -12,6 +12,7 @@ Important fields:
 - `output_file`: where querysplunk writes the raw Splunk response body.
 - `mode`: `job` or `export`.
 - `search`: SPL text.
+- `safety`: explicit acknowledgements for high-impact searches, including `allow_old_earliest` and `allow_index_wildcard`.
 - `dispatch`: dispatch parameters such as `earliest_time`, `latest_time`, `max_count`, `status_buckets`, and `required_fields`.
 - `results`: result endpoint, output mode, count, and offset.
 - `diagnostics.search_log`: `off`, `summary`, `save`, or `both`.

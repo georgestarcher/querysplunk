@@ -23,6 +23,9 @@ type logWriter struct {
 }
 
 var splTimeModifierPattern = regexp.MustCompile(`(?i)(^|\s)(earliest|latest)\s*=`)
+var splEarliestPattern = regexp.MustCompile(`(?i)(^|[\s(])earliest\s*=\s*("[^"]+"|'[^']+'|[^\s|,)]+)`)
+var splIndexWildcardPattern = regexp.MustCompile(`(?i)(^|[\s(])index\s*=\s*("[*]"|'[*]'|[*])($|[\s|,)])`)
+var relativeEarliestPattern = regexp.MustCompile(`(?i)^-(\d+)(s|sec|secs|second|seconds|m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days|w|week|weeks|mon|month|months|q|qtr|quarter|quarters|y|yr|yrs|year|years)(@[a-z0-9]+)?$`)
 
 func (writer logWriter) Write(bytes []byte) (int, error) {
 	hostname, err := os.Hostname()
@@ -100,6 +103,10 @@ results:
   count: 0
   offset: 0
 
+safety:
+  allow_old_earliest: false
+  allow_index_wildcard: false
+
 diagnostics:
   search_log: summary
   # search_log_file: splunkresults.search.log
@@ -134,9 +141,15 @@ type searchConfig struct {
 	OutputFile  string            `yaml:"output_file"`
 	Mode        string            `yaml:"mode"`
 	Search      string            `yaml:"search"`
+	Safety      safetyConfig      `yaml:"safety"`
 	Dispatch    dispatchConfig    `yaml:"dispatch"`
 	Results     resultsConfig     `yaml:"results"`
 	Diagnostics diagnosticsConfig `yaml:"diagnostics"`
+}
+
+type safetyConfig struct {
+	AllowOldEarliest   bool `yaml:"allow_old_earliest"`
+	AllowIndexWildcard bool `yaml:"allow_index_wildcard"`
 }
 
 type dispatchConfig struct {
@@ -257,6 +270,99 @@ func hasSearchTimeBounds(search string, dispatchParams map[string][]string) bool
 	return splTimeModifierPattern.MatchString(search)
 }
 
+func unquoteSearchValue(value string) string {
+	value = strings.TrimSpace(value)
+	if len(value) >= 2 {
+		first := value[0]
+		last := value[len(value)-1]
+		if (first == '"' && last == '"') || (first == '\'' && last == '\'') {
+			return strings.TrimSpace(value[1 : len(value)-1])
+		}
+	}
+	return value
+}
+
+func splEarliestValues(search string, dispatchParams map[string][]string) []string {
+	var values []string
+	for _, value := range dispatchParams["earliest_time"] {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			values = append(values, value)
+		}
+	}
+	for _, match := range splEarliestPattern.FindAllStringSubmatch(search, -1) {
+		if len(match) >= 3 {
+			value := unquoteSearchValue(match[2])
+			if value != "" {
+				values = append(values, value)
+			}
+		}
+	}
+	return values
+}
+
+func parseSplunkEarliest(value string, now time.Time) (time.Time, bool) {
+	value = unquoteSearchValue(value)
+	if value == "" || strings.EqualFold(value, "now") {
+		return time.Time{}, false
+	}
+	if epoch, err := strconv.ParseInt(value, 10, 64); err == nil {
+		return time.Unix(epoch, 0), true
+	}
+	if match := relativeEarliestPattern.FindStringSubmatch(value); len(match) >= 3 {
+		amount, err := strconv.Atoi(match[1])
+		if err != nil {
+			return time.Time{}, false
+		}
+		switch strings.ToLower(match[2]) {
+		case "s", "sec", "secs", "second", "seconds":
+			return now.Add(-time.Duration(amount) * time.Second), true
+		case "m", "min", "mins", "minute", "minutes":
+			return now.Add(-time.Duration(amount) * time.Minute), true
+		case "h", "hr", "hrs", "hour", "hours":
+			return now.Add(-time.Duration(amount) * time.Hour), true
+		case "d", "day", "days":
+			return now.AddDate(0, 0, -amount), true
+		case "w", "week", "weeks":
+			return now.AddDate(0, 0, -7*amount), true
+		case "mon", "month", "months":
+			return now.AddDate(0, -amount, 0), true
+		case "q", "qtr", "quarter", "quarters":
+			return now.AddDate(0, -3*amount, 0), true
+		case "y", "yr", "yrs", "year", "years":
+			return now.AddDate(-amount, 0, 0), true
+		}
+	}
+	for _, layout := range []string{
+		time.RFC3339,
+		"2006-01-02T15:04:05",
+		"2006-01-02 15:04:05",
+		"2006-01-02",
+	} {
+		if parsed, err := time.ParseInLocation(layout, value, now.Location()); err == nil {
+			return parsed, true
+		}
+	}
+	return time.Time{}, false
+}
+
+func safetyViolations(search string, dispatchParams map[string][]string, now time.Time, allowOldEarliest bool, allowIndexWildcard bool) []string {
+	var violations []string
+	if !allowIndexWildcard && splIndexWildcardPattern.MatchString(search) {
+		violations = append(violations, "search uses index=*, which can unexpectedly fan out across a Splunk deployment; rerun with -allow-index-wildcard to acknowledge this risk")
+	}
+	if !allowOldEarliest {
+		cutoff := now.AddDate(-1, 0, 0)
+		for _, value := range splEarliestValues(search, dispatchParams) {
+			parsed, ok := parseSplunkEarliest(value, now)
+			if ok && parsed.Before(cutoff) {
+				violations = append(violations, fmt.Sprintf("earliest=%s is older than the default one-year safety limit; rerun with -allow-old-earliest to acknowledge this risk", value))
+			}
+		}
+	}
+	return violations
+}
+
 func resultParams(config resultsConfig) map[string][]string {
 	params := make(map[string][]string)
 	addStringParam(params, "output_mode", config.OutputMode)
@@ -289,6 +395,10 @@ Authentication and connection settings are read from environment variables:
 
 Use -e to load those values from .env in the working directory.
 
+Safety controls block earliest values older than one year and explicit index=*
+searches unless acknowledged with -allow-old-earliest, -allow-index-wildcard,
+or YAML safety.allow_old_earliest / safety.allow_index_wildcard.
+
 Options:`)
 	flag.PrintDefaults()
 }
@@ -303,6 +413,8 @@ func main() {
 	var forceWrite bool
 	var earliestTime string
 	var latestTime string
+	var allowOldEarliest bool
+	var allowIndexWildcard bool
 
 	log.SetFlags(0)
 	log.SetOutput(new(logWriter))
@@ -314,6 +426,8 @@ func main() {
 	flag.StringVar(&writeConfigFile, "write-config", "", "Write a starter YAML search config and exit")
 	flag.StringVar(&earliestTime, "earliest", "", "Set dispatch earliest_time, such as -15m or 2026-07-10T00:00:00")
 	flag.StringVar(&latestTime, "latest", "", "Set dispatch latest_time, such as now")
+	flag.BoolVar(&allowOldEarliest, "allow-old-earliest", false, "Allow earliest times older than the default one-year safety limit")
+	flag.BoolVar(&allowIndexWildcard, "allow-index-wildcard", false, "Allow searches that explicitly use index=*")
 	flag.BoolVar(&forceWrite, "force", false, "Allow -write-config to overwrite an existing file")
 	flag.StringVar(&queryFile, "q", "query.txt", "Read the SPL search from this plain text file")
 	flag.StringVar(&outputFile, "o", "splunkresults.json", "Write Splunk results to this file")
@@ -433,8 +547,18 @@ func main() {
 			log.Fatal(err)
 		}
 	}
+	if configFile != "" {
+		allowOldEarliest = allowOldEarliest || config.Safety.AllowOldEarliest
+		allowIndexWildcard = allowIndexWildcard || config.Safety.AllowIndexWildcard
+	}
 	if !hasSearchTimeBounds(splunkQueryString, options.DispatchParams) {
 		log.Print("WARN: no SPL earliest/latest modifier or dispatch earliest_time/latest_time was provided; Splunk REST searches can run over all time")
+	}
+	if violations := safetyViolations(splunkQueryString, options.DispatchParams, time.Now(), allowOldEarliest, allowIndexWildcard); len(violations) > 0 {
+		for _, violation := range violations {
+			log.Printf("WARN: %s", violation)
+		}
+		log.Fatal("ERROR: search blocked by safety controls")
 	}
 	if err = conn.DispatchQueryWithOptions(ctx, &splunkQuery, options); err != nil {
 		log.Fatalf("ERROR: %s", err)
