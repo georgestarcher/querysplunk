@@ -1,0 +1,16 @@
+app: search
+output_file: internal-errors-warnings.json
+mode: job
+search: |
+  index=_internal earliest=-1h (log_level=error OR log_level=warn*)
+  | stats count latest(_raw) as latest_message by host source sourcetype log_level component
+  | sort - count
+dispatch:
+  earliest_time: "-1h"
+  latest_time: "now"
+results:
+  endpoint: auto
+  output_mode: json
+  count: 0
+diagnostics:
+  search_log: summary
