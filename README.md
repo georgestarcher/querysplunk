@@ -70,6 +70,16 @@ parameters, result parameters, or search log diagnostics.
 ./splunkquery-darwin -config search.yml
 ```
 
+For quick one-off bounds without YAML, use dispatch-level time flags:
+
+```bash
+./splunkquery-darwin -q query.txt -earliest=-15m -latest=now
+```
+
+If neither the SPL nor dispatch parameters include `earliest` / `latest` time
+bounds, the tool logs a warning. Existing unbounded searches still run, but
+Splunk REST searches can otherwise run over all time.
+
 To generate a starter config:
 
 ```bash
@@ -181,6 +191,7 @@ Run a Splunk search from a plain SPL file or from a structured YAML config.
 
 Examples:
   querysplunk -q query.txt -o splunkresults.json
+  querysplunk -q query.txt -earliest=-15m -latest=now
   querysplunk -config search.yml
   querysplunk -write-config search.yml
   querysplunk -write-config search.yml -force
@@ -201,8 +212,12 @@ Options:
   -config string
     	Run a structured YAML search config
   -e	Load Splunk connection settings from .env
+  -earliest string
+    	Set dispatch earliest_time, such as -15m or 2026-07-10T00:00:00
   -force
     	Allow -write-config to overwrite an existing file
+  -latest string
+    	Set dispatch latest_time, such as now
   -o string
     	Write Splunk results to this file (default "splunkresults.json")
   -q string
