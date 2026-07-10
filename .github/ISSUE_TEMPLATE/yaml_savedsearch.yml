@@ -1,0 +1,95 @@
+name: YAML Saved Search Review
+description: Propose a querysplunk YAML saved search for review and possible inclusion.
+title: "[Saved Search]: "
+labels:
+  - enhancement
+  - saved-search-review
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template to propose a reusable querysplunk YAML search, similar to the health-check examples.
+
+        Do not include Splunk credentials, private URLs, tenant names, private index names, sensitive SPL, customer data, or deployment-specific details.
+  - type: textarea
+    id: purpose
+    attributes:
+      label: Purpose
+      description: What operational question does this saved search answer?
+      placeholder: Summarizes scheduler failures over the last 24 hours.
+    validations:
+      required: true
+  - type: textarea
+    id: yaml
+    attributes:
+      label: Proposed YAML
+      description: Paste a sanitized querysplunk YAML config. Use placeholder index names if needed.
+      render: yaml
+      placeholder: |
+        app: search
+        output_file: example-results.json
+        mode: job
+        search: |
+          search index=_internal earliest=-24h
+          | stats count by sourcetype
+        dispatch:
+          earliest_time: "-24h"
+          latest_time: "now"
+        results:
+          endpoint: auto
+          output_mode: json
+          count: 0
+        safety:
+          allow_old_earliest: false
+          allow_index_wildcard: false
+        diagnostics:
+          search_log: summary
+    validations:
+      required: true
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      description: Which example group best fits this search?
+      options:
+        - Health check
+        - Scheduler
+        - License
+        - Resource usage
+        - Disk or storage
+        - Search concurrency
+        - Internal warnings or errors
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: access
+    attributes:
+      label: Expected Access Requirements
+      description: What Splunk capabilities, indexes, or REST endpoints does this need?
+      placeholder: Requires REST access to /services/server/status and no private indexes.
+    validations:
+      required: true
+  - type: dropdown
+    id: impact
+    attributes:
+      label: Splunk Deployment Impact
+      description: How broad or expensive is the proposed search expected to be?
+      options:
+        - Low impact and bounded
+        - Potentially broad but bounded
+        - Requires safety override acknowledgement
+        - Unsure
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety-review
+    attributes:
+      label: Public Repo Safety
+      options:
+        - label: I have removed tokens, passwords, private URLs, tenant names, private index names, sensitive SPL, customer data, and sensitive Splunk deployment details.
+          required: true
+        - label: The YAML includes explicit time bounds or explains why a REST-only search is bounded.
+          required: true
+        - label: The YAML does not use index=* unless the safety override is intentionally set and explained.
+          required: true

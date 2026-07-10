@@ -29,6 +29,16 @@ Build the CLI locally:
 go build -o querysplunk .
 ```
 
+## Public issue submissions
+
+This is a public repository. Use the GitHub issue templates for bug reports,
+feature requests, and proposed YAML saved searches. Before submitting an issue,
+remove Splunk credentials, private URLs, tenant names, private index names,
+sensitive SPL, customer data, and deployment-specific details.
+
+Proposed reusable YAML searches should use the saved-search review template and
+include time bounds, expected access requirements, and Splunk deployment impact.
+
 ## Configuration environment
 
 By default, the tool reads connection settings from operating system

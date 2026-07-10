@@ -39,3 +39,10 @@ body:
         - Should be included in release notes
         - Internal-only change
         - Unsure
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Public Repo Safety
+      options:
+        - label: I have removed tokens, passwords, private URLs, sensitive SPL, and sensitive Splunk deployment details from this request.
+          required: true

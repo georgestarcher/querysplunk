@@ -1,0 +1,124 @@
+name: Issue Triage
+
+# Keep this workflow deterministic and local to GitHub issue metadata.
+# The default OpenAI Codex GitHub integration documents PR review triggers,
+# not plain issue triage triggers, so this action should not post @codex
+# handoff comments or assume Codex will review issues automatically.
+
+on:
+  issues:
+    types:
+      - opened
+      - edited
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Triage public issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const text = `${issue.title || ""}\n${issue.body || ""}`;
+            const lower = text.toLowerCase();
+
+            const desiredLabels = new Set();
+
+            if (issue.title?.startsWith("[Bug]:")) {
+              desiredLabels.add("bug");
+            }
+            if (issue.title?.startsWith("[Feature]:")) {
+              desiredLabels.add("enhancement");
+            }
+            if (issue.title?.startsWith("[Saved Search]:")) {
+              desiredLabels.add("enhancement");
+              desiredLabels.add("saved-search-review");
+              desiredLabels.add("splunk-impact");
+            }
+
+            const missingRequiredSections = [
+              "Summary",
+              "Steps to Reproduce",
+              "Expected Behavior",
+              "Actual Behavior",
+              "Problem or Use Case",
+              "Proposed Solution",
+            ].every((section) => !lower.includes(section.toLowerCase()));
+            if (missingRequiredSections) {
+              desiredLabels.add("needs-info");
+            }
+
+            const splunkImpactPatterns = [
+              /\bindex\s*=\s*\*/i,
+              /\bearliest\s*=\s*-(?:[2-9]|\d{2,})y\b/i,
+              /\bearliest\s*=\s*-(?:1[3-9]|\d{2,})mon\b/i,
+              /\bdispatch_rest_to_indexers\b/i,
+              /\bsplunkbaseurl\b/i,
+              /\bsplunktoken\b/i,
+              /\bsplunkpassword\b/i,
+            ];
+            if (splunkImpactPatterns.some((pattern) => pattern.test(text))) {
+              desiredLabels.add("splunk-impact");
+            }
+
+            const sensitivePatterns = [
+              /\b(?:splunktoken|splunkpassword|authorization|bearer)\b\s*[:=]/i,
+              /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/,
+              /\bhttps?:\/\/(?:localhost|127\.0\.0\.1|10\.|172\.(?:1[6-9]|2\d|3[01])\.|192\.168\.|[^/\s]+\.local)\S*/i,
+              /\bhttps?:\/\/[^/\s]*(?:splunkcloud|splunk)\S*/i,
+            ];
+            const looksSensitive = sensitivePatterns.some((pattern) => pattern.test(text));
+            if (looksSensitive) {
+              desiredLabels.add("security-sensitive");
+            }
+
+            async function ensureLabel(name, color, description) {
+              try {
+                await github.rest.issues.getLabel({ owner, repo, name });
+              } catch (error) {
+                if (error.status !== 404) {
+                  throw error;
+                }
+                await github.rest.issues.createLabel({ owner, repo, name, color, description });
+              }
+            }
+
+            await ensureLabel("needs-info", "D4C5F9", "More information is needed before this can be worked.");
+            await ensureLabel("splunk-impact", "FBCA04", "May affect live Splunk behavior or deployment load.");
+            await ensureLabel("security-sensitive", "B60205", "May contain sensitive data that should be sanitized.");
+            await ensureLabel("saved-search-review", "1D76DB", "Proposed querysplunk YAML saved search for review.");
+
+            if (desiredLabels.size > 0) {
+              await github.rest.issues.addLabels({
+                owner,
+                repo,
+                issue_number: issue.number,
+                labels: [...desiredLabels],
+              });
+            }
+
+            if (looksSensitive) {
+              const marker = "<!-- querysplunk-sensitive-triage -->";
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                owner,
+                repo,
+                issue_number: issue.number,
+                per_page: 100,
+              });
+              const alreadyCommented = comments.some((comment) => comment.body?.includes(marker));
+              if (!alreadyCommented) {
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: issue.number,
+                  body: `${marker}\nThanks for the report. This issue may include sensitive Splunk details such as credentials, private URLs, tenant names, or deployment-specific SPL. Because this is a public repository, please edit the issue to remove anything sensitive before we investigate further.`,
+                });
+              }
+            }

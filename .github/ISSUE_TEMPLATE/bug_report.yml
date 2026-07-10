@@ -54,5 +54,5 @@ body:
     attributes:
       label: Secret Safety
       options:
-        - label: I have removed tokens, passwords, and sensitive Splunk data from this report.
+        - label: I have removed tokens, passwords, private URLs, sensitive SPL, and sensitive Splunk deployment details from this report.
           required: true
