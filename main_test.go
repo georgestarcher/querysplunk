@@ -1,6 +1,8 @@
 package main
 
 import (
+	"errors"
+	"os"
 	"testing"
 	"time"
 )
@@ -89,5 +91,43 @@ func TestTLSVerifyFromEnv(t *testing.T) {
 				t.Fatalf("value %q expected %v, got %v", tc.value, tc.want, got)
 			}
 		})
+	}
+}
+
+func TestReadSearchFile(t *testing.T) {
+	queryFile := t.TempDir() + "/search.spl"
+	want := "search index=_internal | head 1\n| table _time host\n"
+	if err := os.WriteFile(queryFile, []byte(want), 0644); err != nil {
+		t.Fatalf("write query fixture: %v", err)
+	}
+
+	got, err := readSearchFile(queryFile)
+	if err != nil {
+		t.Fatalf("read search file: %v", err)
+	}
+	if got != want {
+		t.Fatalf("expected query contents %q, got %q", want, got)
+	}
+}
+
+func TestReadSearchFileRejectsEmptySearch(t *testing.T) {
+	queryFile := t.TempDir() + "/empty.spl"
+	if err := os.WriteFile(queryFile, []byte(" \n\t"), 0644); err != nil {
+		t.Fatalf("write query fixture: %v", err)
+	}
+
+	_, err := readSearchFile(queryFile)
+	if err == nil {
+		t.Fatal("expected empty search file error")
+	}
+}
+
+func TestReadSearchFileReturnsMissingFileError(t *testing.T) {
+	_, err := readSearchFile(t.TempDir() + "/missing.spl")
+	if err == nil {
+		t.Fatal("expected missing file error")
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected not-exist error, got %v", err)
 	}
 }

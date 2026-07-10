@@ -61,6 +61,19 @@ func tlsVerifyFromEnv() (bool, error) {
 	return parsed, nil
 }
 
+func readSearchFile(path string) (string, error) {
+	fileContent, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+
+	search := string(fileContent)
+	if strings.TrimSpace(search) == "" {
+		return "", fmt.Errorf("SPL query file %q is empty", path)
+	}
+	return search, nil
+}
+
 func main() {
 	var queryFile string
 	var outputFile string
@@ -87,11 +100,10 @@ func main() {
 	}
 	appContext = strings.TrimSpace(appContext)
 
-	fileContent, err := os.ReadFile(queryFile)
+	splunkQueryString, err := readSearchFile(queryFile)
 	if err != nil {
 		log.Fatal(err)
 	}
-	splunkQueryString := string(fileContent)
 
 	username := os.Getenv("SPLUNKUSERNAME")
 	password := os.Getenv("SPLUNKPASSWORD")
