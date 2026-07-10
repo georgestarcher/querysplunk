@@ -46,6 +46,7 @@ type SplunkQuery struct {
 	State          string
 	Results        []byte
 	LogDiagnostics JobLogDiagnostics
+	SearchLogRead  bool
 }
 
 type SplunkJobStatus struct {
@@ -474,6 +475,7 @@ func (conn SplunkConnection) collectJobLogDiagnostics(ctx context.Context, query
 		log.Printf("WARN: could not fetch Splunk search log for job %s: %v", query.Job.Sid, err)
 		return
 	}
+	query.SearchLogRead = true
 	query.LogDiagnostics = AnalyzeJobLog(searchLog)
 	logDiagnostics(query.LogDiagnostics)
 }

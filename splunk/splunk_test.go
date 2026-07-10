@@ -164,6 +164,9 @@ func TestDispatchQueryWritesResultsOnDone(t *testing.T) {
 	if query.LogDiagnostics.ExecutionDuration != "1.23 seconds" {
 		t.Fatalf("expected execution duration from search.log, got %q", query.LogDiagnostics.ExecutionDuration)
 	}
+	if !query.SearchLogRead {
+		t.Fatal("expected search.log to be read")
+	}
 	if len(query.LogDiagnostics.Warnings) != 1 {
 		t.Fatalf("expected one warning from search.log, got %#v", query.LogDiagnostics.Warnings)
 	}
@@ -442,6 +445,9 @@ func TestDispatchQueryFetchesSearchLogOnFailedJob(t *testing.T) {
 	}
 	if got := searchLogCalls.Load(); got != 1 {
 		t.Fatalf("expected one search.log fetch, got %d", got)
+	}
+	if !query.SearchLogRead {
+		t.Fatal("expected search.log to be read")
 	}
 	if len(query.LogDiagnostics.Errors) != 1 {
 		t.Fatalf("expected one diagnostic error from search.log, got %#v", query.LogDiagnostics.Errors)
