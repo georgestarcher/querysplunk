@@ -97,6 +97,7 @@ Example:
 ```yaml
 app: search
 output_file: splunkresults.json
+mode: job
 search: |
   search index=_internal earliest=-15m
   | head 1
@@ -138,6 +139,13 @@ Supported `results.endpoint` modes:
 Use `results.count` and `results.offset` to request a specific result page.
 The tool writes the response body returned by Splunk without merging multiple
 pages.
+
+Supported `mode` values:
+
+- `job`: dispatch a search job, poll for completion, fetch `search.log`, then
+  fetch results
+- `export`: stream results directly from Splunk export; this does not create a
+  search job ID and does not support `search.log` diagnostics
 
 Supported `diagnostics.search_log` modes:
 

@@ -201,6 +201,7 @@ func TestLoadSearchConfig(t *testing.T) {
 	configFile := t.TempDir() + "/search.yml"
 	content := `app: search
 output_file: out.json
+mode: export
 search: |
   search index=_internal earliest=-15m
   | head 1
@@ -233,6 +234,9 @@ diagnostics:
 	}
 	if config.OutputFile != "out.json" {
 		t.Fatalf("expected output file, got %q", config.OutputFile)
+	}
+	if config.Mode != "export" {
+		t.Fatalf("expected mode export, got %q", config.Mode)
 	}
 	if !strings.Contains(config.Search, "index=_internal") {
 		t.Fatalf("expected search content, got %q", config.Search)
@@ -292,6 +296,21 @@ results:
 	_, err := loadSearchConfig(configFile)
 	if err == nil {
 		t.Fatal("expected invalid result endpoint error")
+	}
+}
+
+func TestLoadSearchConfigRejectsInvalidExecutionMode(t *testing.T) {
+	configFile := t.TempDir() + "/search.yml"
+	content := `mode: realtime
+search: search index=_internal earliest=-15m | head 1
+`
+	if err := os.WriteFile(configFile, []byte(content), 0644); err != nil {
+		t.Fatalf("write config fixture: %v", err)
+	}
+
+	_, err := loadSearchConfig(configFile)
+	if err == nil {
+		t.Fatal("expected invalid execution mode error")
 	}
 }
 

@@ -578,6 +578,200 @@ func TestDispatchQueryWithOptionsHonorsV1ResultEndpoint(t *testing.T) {
 	}
 }
 
+func TestDispatchQueryWithOptionsExportsUsingV2WhenAvailable(t *testing.T) {
+	exportPayload := `{"result":{"source":"v2-export"}}`
+	var v1Calls atomic.Int32
+	var v2Calls atomic.Int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/services/search/v2/jobs/export":
+			v2Calls.Add(1)
+			if err := r.ParseForm(); err != nil {
+				t.Fatalf("unexpected parse error: %v", err)
+			}
+			if got := r.FormValue("search"); got != "search index=_internal earliest=-15m | head 1" {
+				t.Fatalf("unexpected search value %q", got)
+			}
+			if got := r.FormValue("output_mode"); got != "json" {
+				t.Fatalf("expected default output_mode json, got %q", got)
+			}
+			_, err := w.Write([]byte(exportPayload))
+			if err != nil {
+				t.Fatalf("unexpected write error: %v", err)
+			}
+		case r.Method == http.MethodPost && r.URL.Path == "/services/search/jobs/export":
+			v1Calls.Add(1)
+			w.WriteHeader(http.StatusOK)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer ts.Close()
+
+	output := t.TempDir() + "/export.json"
+	conn := SplunkConnection{
+		AuthToken: "token",
+		BaseURL:   ts.URL,
+		Timeout:   5 * time.Second,
+	}
+	query := SplunkQuery{Query: "search index=_internal earliest=-15m | head 1"}
+	options := DispatchOptions{
+		OutputFile:    output,
+		ExecutionMode: ExecutionModeExport,
+	}
+
+	if err := conn.DispatchQueryWithOptions(context.Background(), &query, options); err != nil {
+		t.Fatalf("expected export success, got %v", err)
+	}
+	if got := v2Calls.Load(); got != 1 {
+		t.Fatalf("expected one v2 export call, got %d", got)
+	}
+	if got := v1Calls.Load(); got != 0 {
+		t.Fatalf("expected no v1 export call, got %d", got)
+	}
+	if query.Job.Sid != "" {
+		t.Fatalf("expected export mode to not create sid, got %q", query.Job.Sid)
+	}
+	if query.SearchLogRead {
+		t.Fatal("expected export mode to skip search.log")
+	}
+	data, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatalf("read export output: %v", err)
+	}
+	if string(data) != exportPayload {
+		t.Fatalf("unexpected export output %q", string(data))
+	}
+}
+
+func TestDispatchQueryWithOptionsExportsFallbackToV1(t *testing.T) {
+	exportPayload := `{"result":{"source":"v1-export"}}`
+	var v1Calls atomic.Int32
+	var v2Calls atomic.Int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/services/search/v2/jobs/export":
+			v2Calls.Add(1)
+			w.WriteHeader(http.StatusNotFound)
+		case r.Method == http.MethodPost && r.URL.Path == "/services/search/jobs/export":
+			v1Calls.Add(1)
+			if err := r.ParseForm(); err != nil {
+				t.Fatalf("unexpected parse error: %v", err)
+			}
+			if got := r.FormValue("count"); got != "0" {
+				t.Fatalf("expected result count 0, got %q", got)
+			}
+			_, err := w.Write([]byte(exportPayload))
+			if err != nil {
+				t.Fatalf("unexpected write error: %v", err)
+			}
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer ts.Close()
+
+	output := t.TempDir() + "/export.json"
+	conn := SplunkConnection{
+		AuthToken: "token",
+		BaseURL:   ts.URL,
+		Timeout:   5 * time.Second,
+	}
+	query := SplunkQuery{Query: "search index=_internal earliest=-15m | head 1"}
+	options := DispatchOptions{
+		OutputFile:    output,
+		ExecutionMode: ExecutionModeExport,
+		ResultParams:  map[string][]string{"count": {"0"}},
+	}
+
+	if err := conn.DispatchQueryWithOptions(context.Background(), &query, options); err != nil {
+		t.Fatalf("expected export success, got %v", err)
+	}
+	if got := v2Calls.Load(); got != 1 {
+		t.Fatalf("expected one v2 export call, got %d", got)
+	}
+	if got := v1Calls.Load(); got != 1 {
+		t.Fatalf("expected one v1 export call, got %d", got)
+	}
+	data, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatalf("read export output: %v", err)
+	}
+	if string(data) != exportPayload {
+		t.Fatalf("unexpected export output %q", string(data))
+	}
+}
+
+func TestDispatchQueryWithOptionsExportsExplicitV1(t *testing.T) {
+	exportPayload := `{"result":{}}`
+	var v2Calls atomic.Int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/services/search/v2/jobs/export":
+			v2Calls.Add(1)
+			w.WriteHeader(http.StatusOK)
+		case r.Method == http.MethodPost && r.URL.Path == "/services/search/jobs/export":
+			_, err := w.Write([]byte(exportPayload))
+			if err != nil {
+				t.Fatalf("unexpected write error: %v", err)
+			}
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer ts.Close()
+
+	output := t.TempDir() + "/export.json"
+	conn := SplunkConnection{
+		AuthToken: "token",
+		BaseURL:   ts.URL,
+		Timeout:   5 * time.Second,
+	}
+	query := SplunkQuery{Query: "search index=_internal earliest=-15m | head 1"}
+	options := DispatchOptions{
+		OutputFile:         output,
+		ExecutionMode:      ExecutionModeExport,
+		ResultEndpointMode: ResultEndpointV1,
+	}
+
+	if err := conn.DispatchQueryWithOptions(context.Background(), &query, options); err != nil {
+		t.Fatalf("expected export success, got %v", err)
+	}
+	if got := v2Calls.Load(); got != 0 {
+		t.Fatalf("expected no v2 export calls, got %d", got)
+	}
+}
+
+func TestDispatchQueryWithOptionsExportErrorDoesNotLeakSensitiveURLParts(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		_, err := w.Write([]byte("export failure"))
+		if err != nil {
+			t.Fatalf("unexpected write error: %v", err)
+		}
+	}))
+	defer ts.Close()
+
+	conn := SplunkConnection{
+		AuthToken: "token",
+		BaseURL:   strings.Replace(ts.URL, "://", "://user:pass@", 1),
+		Timeout:   5 * time.Second,
+	}
+	query := SplunkQuery{Query: "search index=_internal earliest=-15m | head 1"}
+	options := DispatchOptions{
+		OutputFile:    t.TempDir() + "/export.json",
+		ExecutionMode: ExecutionModeExport,
+	}
+
+	err := conn.DispatchQueryWithOptions(context.Background(), &query, options)
+	if err == nil {
+		t.Fatal("expected export error")
+	}
+	if strings.Contains(err.Error(), "user") || strings.Contains(err.Error(), "pass") {
+		t.Fatalf("expected sanitized URL in error, got %v", err)
+	}
+}
+
 func TestDispatchQueryWithOptionsSavesSearchLog(t *testing.T) {
 	sid := "sid-save-log"
 	searchLog := "INFO Search completed in 1 seconds\nWARN DispatchThread - saved warning"

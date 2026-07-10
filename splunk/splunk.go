@@ -91,11 +91,19 @@ const (
 	ResultEndpointV2   ResultEndpointMode = "v2"
 )
 
+type ExecutionMode string
+
+const (
+	ExecutionModeJob    ExecutionMode = "job"
+	ExecutionModeExport ExecutionMode = "export"
+)
+
 type DispatchOptions struct {
 	OutputFile         string
 	DispatchParams     map[string][]string
 	ResultParams       map[string][]string
 	ResultEndpointMode ResultEndpointMode
+	ExecutionMode      ExecutionMode
 	SearchLogMode      SearchLogMode
 	SearchLogFile      string
 }
@@ -112,6 +120,7 @@ const (
 	dispatchStatePaused         = "PAUSED"
 	defaultPollInterval         = time.Second
 	cancelTimeout               = 10 * time.Second
+	maxErrorBodyBytes           = 2048
 	maxDiagnosticLines          = 20
 	maxDiagnosticLineLength     = 500
 )
@@ -142,6 +151,45 @@ func (conn SplunkConnection) httpGet(ctx context.Context, url string, data *url.
 
 func (conn SplunkConnection) httpPost(ctx context.Context, url string, data *url.Values) (string, error) {
 	return conn.httpCall(ctx, url, http.MethodPost, data)
+}
+
+func (conn SplunkConnection) httpPostToFile(ctx context.Context, requestURL string, data *url.Values, outputFile string) error {
+	client := conn.httpClient()
+
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL, bytes.NewBufferString(data.Encode()))
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	conn.addAuthHeader(request)
+
+	response, err := client.Do(request)
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		body, readErr := io.ReadAll(io.LimitReader(response.Body, maxErrorBodyBytes+1))
+		if readErr != nil {
+			return readErr
+		}
+		return &HTTPStatusError{
+			StatusCode: response.StatusCode,
+			Status:     response.Status,
+			URL:        safeURLForLog(requestURL),
+			Body:       responseBodyForError(body),
+		}
+	}
+
+	file, err := os.Create(outputFile)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	_, err = io.Copy(file, response.Body)
+	return err
 }
 
 func (conn SplunkConnection) httpCall(ctx context.Context, requestURL string, method string, data *url.Values) (string, error) {
@@ -196,8 +244,6 @@ func (conn SplunkConnection) httpCall(ctx context.Context, requestURL string, me
 }
 
 func responseBodyForError(body []byte) string {
-	const maxErrorBodyBytes = 2048
-
 	trimmedBody := strings.TrimSpace(string(body))
 	if len(trimmedBody) <= maxErrorBodyBytes {
 		return trimmedBody
@@ -424,6 +470,7 @@ func DefaultDispatchOptions(outputFile string) DispatchOptions {
 	return DispatchOptions{
 		OutputFile:         outputFile,
 		ResultEndpointMode: ResultEndpointAuto,
+		ExecutionMode:      ExecutionModeJob,
 		SearchLogMode:      SearchLogModeSummary,
 	}
 }
@@ -434,6 +481,9 @@ func (options DispatchOptions) normalized() DispatchOptions {
 	}
 	if options.ResultEndpointMode == "" {
 		options.ResultEndpointMode = ResultEndpointAuto
+	}
+	if options.ExecutionMode == "" {
+		options.ExecutionMode = ExecutionModeJob
 	}
 	return options
 }
@@ -475,6 +525,13 @@ func (conn SplunkConnection) jobResultsURL(query *SplunkQuery, mode ResultEndpoi
 	return fmt.Sprintf("%s/results/", conn.jobURL(query))
 }
 
+func (conn SplunkConnection) exportURL(mode ResultEndpointMode) string {
+	if mode == ResultEndpointV2 {
+		return fmt.Sprintf("%s/services/search/v2/jobs/export", conn.BaseURL)
+	}
+	return fmt.Sprintf("%s/services/search/jobs/export", conn.BaseURL)
+}
+
 // Fetch job results.
 func (conn SplunkConnection) jobResults(ctx context.Context, query *SplunkQuery, options DispatchOptions) error {
 	data := make(url.Values)
@@ -506,6 +563,40 @@ func (conn SplunkConnection) jobResults(ctx context.Context, query *SplunkQuery,
 	}
 
 	query.Results = []byte(response)
+	return nil
+}
+
+func (conn SplunkConnection) exportQuery(ctx context.Context, query *SplunkQuery, options DispatchOptions) error {
+	data := make(url.Values)
+	data = conn.namespaceValues(data)
+	data = addParams(data, options.DispatchParams)
+	data = addParams(data, options.ResultParams)
+	if data.Get("output_mode") == "" {
+		data.Add("output_mode", "json")
+	}
+	data.Add("search", query.Query)
+
+	mode := options.ResultEndpointMode
+	query.State = "EXPORT"
+	if mode == ResultEndpointAuto {
+		err := conn.httpPostToFile(ctx, conn.exportURL(ResultEndpointV2), &data, options.OutputFile)
+		if err == nil {
+			query.State = dispatchStateDone
+			return nil
+		}
+		if !canFallbackResultEndpoint(err) {
+			query.Results = nil
+			return err
+		}
+		log.Printf("INFO: Splunk search v2 export endpoint unavailable; falling back to v1 export endpoint")
+		mode = ResultEndpointV1
+	}
+
+	if err := conn.httpPostToFile(ctx, conn.exportURL(mode), &data, options.OutputFile); err != nil {
+		query.Results = nil
+		return err
+	}
+	query.State = dispatchStateDone
 	return nil
 }
 
@@ -633,6 +724,10 @@ func (conn SplunkConnection) DispatchQuery(ctx context.Context, query *SplunkQue
 
 func (conn SplunkConnection) DispatchQueryWithOptions(ctx context.Context, query *SplunkQuery, options DispatchOptions) error {
 	options = options.normalized()
+	if options.ExecutionMode == ExecutionModeExport {
+		return conn.exportQuery(ctx, query, options)
+	}
+
 	data := make(url.Values)
 	data = conn.namespaceValues(data)
 	data = addParams(data, options.DispatchParams)
