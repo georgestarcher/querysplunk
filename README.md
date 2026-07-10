@@ -92,11 +92,15 @@ To run integration tests in GitHub Actions:
 3. Enable **`run_integration_tests`**
 4. Start the run
 
-Create these secrets in your repository for the integration step:
+The workflow uses the GitHub environment named `AUTH_TOKEN`. Create these
+environment secrets there for the integration step:
 
 - `SPLUNKBASEURL`
 - `SPLUNKTOKEN`
 - `SPLUNKUSERNAME`
+
+Optional environment secrets:
+
 - `SPLUNKPASSWORD`
 - `SPLUNKTLSVERIFY`
 - `SPLUNKTIMEOUT`

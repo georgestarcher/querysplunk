@@ -3,10 +3,12 @@
 # Integration workflow note:
 # - Normal CI on push/pull_request runs only unit, race, lint, tidy, and vuln checks.
 # - Live Splunk integration tests run only via manual workflow_dispatch with run_integration_tests=true.
-# Required repository secrets for integration:
+# Required GitHub environment secrets for integration.
+# Configure these in the AUTH_TOKEN environment:
 #   - SPLUNKBASEURL
 #   - SPLUNKTOKEN
 #   - SPLUNKUSERNAME
+# Optional GitHub environment secrets for integration:
 #   - SPLUNKPASSWORD
 #   - SPLUNKTLSVERIFY
 #   - SPLUNKTIMEOUT
@@ -104,6 +106,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.run_integration_tests == 'true'
     needs: build
     runs-on: ubuntu-latest
+    environment: AUTH_TOKEN
     steps:
       - uses: actions/checkout@v4
       - name: Set up Go
