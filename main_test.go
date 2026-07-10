@@ -212,6 +212,7 @@ dispatch:
   required_fields:
     - sourcetype
 results:
+  endpoint: auto
   output_mode: json
   count: 0
   offset: 10
@@ -241,6 +242,9 @@ diagnostics:
 	}
 	if config.Results.Count == nil || *config.Results.Count != 0 {
 		t.Fatalf("expected count 0, got %#v", config.Results.Count)
+	}
+	if config.Results.Endpoint != "auto" {
+		t.Fatalf("expected results endpoint auto, got %q", config.Results.Endpoint)
 	}
 	if config.Diagnostics.SearchLog != "both" {
 		t.Fatalf("expected diagnostics search_log both, got %q", config.Diagnostics.SearchLog)
@@ -272,6 +276,22 @@ diagnostics:
 	_, err := loadSearchConfig(configFile)
 	if err == nil {
 		t.Fatal("expected invalid search log mode error")
+	}
+}
+
+func TestLoadSearchConfigRejectsInvalidResultEndpoint(t *testing.T) {
+	configFile := t.TempDir() + "/search.yml"
+	content := `search: search index=_internal earliest=-15m | head 1
+results:
+  endpoint: legacy
+`
+	if err := os.WriteFile(configFile, []byte(content), 0644); err != nil {
+		t.Fatalf("write config fixture: %v", err)
+	}
+
+	_, err := loadSearchConfig(configFile)
+	if err == nil {
+		t.Fatal("expected invalid result endpoint error")
 	}
 }
 

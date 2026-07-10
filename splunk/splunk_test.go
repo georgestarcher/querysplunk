@@ -390,6 +390,194 @@ func TestDispatchQueryWithOptionsSendsDispatchAndResultParams(t *testing.T) {
 	}
 }
 
+func TestDispatchQueryWithOptionsUsesV2ResultsWhenAvailable(t *testing.T) {
+	sid := "sid-v2"
+	resultsPayload := `{"results": [{"source":"v2"}]}`
+	var v1Calls atomic.Int32
+	var v2Calls atomic.Int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/services/search/jobs/":
+			w.Header().Set("Content-Type", "application/xml")
+			_, err := w.Write([]byte(`<response><sid>` + sid + `</sid></response>`))
+			if err != nil {
+				t.Fatalf("unexpected write error: %v", err)
+			}
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/services/search/jobs/"+sid):
+			w.Header().Set("Content-Type", "application/json")
+			_, err := w.Write([]byte(`{"entry":[{"content":{"dispatchState":"DONE"}}]}`))
+			if err != nil {
+				t.Fatalf("unexpected write error: %v", err)
+			}
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/services/search/jobs/"+sid+"/search.log"):
+			w.WriteHeader(http.StatusOK)
+		case r.Method == http.MethodGet && r.URL.Path == "/services/search/v2/jobs/"+sid+"/results":
+			v2Calls.Add(1)
+			if got := r.URL.Query().Get("count"); got != "0" {
+				t.Fatalf("expected count 0, got %q", got)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, err := w.Write([]byte(resultsPayload))
+			if err != nil {
+				t.Fatalf("unexpected write error: %v", err)
+			}
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/services/search/jobs/"+sid+"/results/"):
+			v1Calls.Add(1)
+			w.WriteHeader(http.StatusOK)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer ts.Close()
+
+	conn := SplunkConnection{
+		AuthToken:    "token",
+		BaseURL:      ts.URL,
+		Timeout:      5 * time.Second,
+		PollInterval: time.Millisecond,
+	}
+	query := SplunkQuery{Query: "search index=_internal earliest=-15m | head 1"}
+	options := DispatchOptions{
+		OutputFile:         t.TempDir() + "/out.json",
+		ResultEndpointMode: ResultEndpointAuto,
+		ResultParams:       map[string][]string{"count": {"0"}},
+		SearchLogMode:      SearchLogModeOff,
+	}
+
+	if err := conn.DispatchQueryWithOptions(context.Background(), &query, options); err != nil {
+		t.Fatalf("expected success, got %v", err)
+	}
+	if got := v2Calls.Load(); got != 1 {
+		t.Fatalf("expected one v2 results call, got %d", got)
+	}
+	if got := v1Calls.Load(); got != 0 {
+		t.Fatalf("expected no v1 results call, got %d", got)
+	}
+	if strings.TrimSpace(string(query.Results)) != resultsPayload {
+		t.Fatalf("expected v2 results payload, got %q", string(query.Results))
+	}
+}
+
+func TestDispatchQueryWithOptionsFallsBackToV1Results(t *testing.T) {
+	sid := "sid-v1-fallback"
+	resultsPayload := `{"results": [{"source":"v1"}]}`
+	var v1Calls atomic.Int32
+	var v2Calls atomic.Int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/services/search/jobs/":
+			w.Header().Set("Content-Type", "application/xml")
+			_, err := w.Write([]byte(`<response><sid>` + sid + `</sid></response>`))
+			if err != nil {
+				t.Fatalf("unexpected write error: %v", err)
+			}
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/services/search/jobs/"+sid):
+			w.Header().Set("Content-Type", "application/json")
+			_, err := w.Write([]byte(`{"entry":[{"content":{"dispatchState":"DONE"}}]}`))
+			if err != nil {
+				t.Fatalf("unexpected write error: %v", err)
+			}
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/services/search/jobs/"+sid+"/search.log"):
+			w.WriteHeader(http.StatusOK)
+		case r.Method == http.MethodGet && r.URL.Path == "/services/search/v2/jobs/"+sid+"/results":
+			v2Calls.Add(1)
+			w.WriteHeader(http.StatusNotFound)
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/services/search/jobs/"+sid+"/results/"):
+			v1Calls.Add(1)
+			w.Header().Set("Content-Type", "application/json")
+			_, err := w.Write([]byte(resultsPayload))
+			if err != nil {
+				t.Fatalf("unexpected write error: %v", err)
+			}
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer ts.Close()
+
+	conn := SplunkConnection{
+		AuthToken:    "token",
+		BaseURL:      ts.URL,
+		Timeout:      5 * time.Second,
+		PollInterval: time.Millisecond,
+	}
+	query := SplunkQuery{Query: "search index=_internal earliest=-15m | head 1"}
+	options := DispatchOptions{
+		OutputFile:         t.TempDir() + "/out.json",
+		ResultEndpointMode: ResultEndpointAuto,
+		SearchLogMode:      SearchLogModeOff,
+	}
+
+	if err := conn.DispatchQueryWithOptions(context.Background(), &query, options); err != nil {
+		t.Fatalf("expected success, got %v", err)
+	}
+	if got := v2Calls.Load(); got != 1 {
+		t.Fatalf("expected one v2 results call, got %d", got)
+	}
+	if got := v1Calls.Load(); got != 1 {
+		t.Fatalf("expected one v1 fallback call, got %d", got)
+	}
+	if strings.TrimSpace(string(query.Results)) != resultsPayload {
+		t.Fatalf("expected v1 fallback payload, got %q", string(query.Results))
+	}
+}
+
+func TestDispatchQueryWithOptionsHonorsV1ResultEndpoint(t *testing.T) {
+	sid := "sid-explicit-v1"
+	resultsPayload := `{"results": []}`
+	var v2Calls atomic.Int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/services/search/jobs/":
+			w.Header().Set("Content-Type", "application/xml")
+			_, err := w.Write([]byte(`<response><sid>` + sid + `</sid></response>`))
+			if err != nil {
+				t.Fatalf("unexpected write error: %v", err)
+			}
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/services/search/jobs/"+sid):
+			w.Header().Set("Content-Type", "application/json")
+			_, err := w.Write([]byte(`{"entry":[{"content":{"dispatchState":"DONE"}}]}`))
+			if err != nil {
+				t.Fatalf("unexpected write error: %v", err)
+			}
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/services/search/jobs/"+sid+"/search.log"):
+			w.WriteHeader(http.StatusOK)
+		case r.Method == http.MethodGet && r.URL.Path == "/services/search/v2/jobs/"+sid+"/results":
+			v2Calls.Add(1)
+			w.WriteHeader(http.StatusOK)
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/services/search/jobs/"+sid+"/results/"):
+			w.Header().Set("Content-Type", "application/json")
+			_, err := w.Write([]byte(resultsPayload))
+			if err != nil {
+				t.Fatalf("unexpected write error: %v", err)
+			}
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer ts.Close()
+
+	conn := SplunkConnection{
+		AuthToken:    "token",
+		BaseURL:      ts.URL,
+		Timeout:      5 * time.Second,
+		PollInterval: time.Millisecond,
+	}
+	query := SplunkQuery{Query: "search index=_internal earliest=-15m | head 1"}
+	options := DispatchOptions{
+		OutputFile:         t.TempDir() + "/out.json",
+		ResultEndpointMode: ResultEndpointV1,
+		SearchLogMode:      SearchLogModeOff,
+	}
+
+	if err := conn.DispatchQueryWithOptions(context.Background(), &query, options); err != nil {
+		t.Fatalf("expected success, got %v", err)
+	}
+	if got := v2Calls.Load(); got != 0 {
+		t.Fatalf("expected no v2 calls, got %d", got)
+	}
+}
+
 func TestDispatchQueryWithOptionsSavesSearchLog(t *testing.T) {
 	sid := "sid-save-log"
 	searchLog := "INFO Search completed in 1 seconds\nWARN DispatchThread - saved warning"
