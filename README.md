@@ -57,6 +57,18 @@ parameters, result parameters, or search log diagnostics.
 ./splunkquery-darwin -config search.yml
 ```
 
+To generate a starter config:
+
+```bash
+./splunkquery-darwin -write-config search.yml
+```
+
+The command refuses to overwrite an existing file unless `-force` is also set:
+
+```bash
+./splunkquery-darwin -write-config search.yml -force
+```
+
 Example:
 
 ```yaml
@@ -152,12 +164,16 @@ Usage of ./splunkquery-darwin:
         Read structured search config from this YAML file
   -e
         Use .env file
+  -force
+        Allow -write-config to overwrite an existing file
   -o string
         Write Splunk results to this JSON file. (default "splunkresults.json")
   -app string
         Splunk app context (namespace) for query execution
   -q string
         Read the SPL search from this file. (default "query.txt")
+  -write-config string
+        Write a starter structured YAML config file and exit
 
 ### integration tests
 

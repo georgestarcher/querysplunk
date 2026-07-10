@@ -143,6 +143,60 @@ func TestReadSearchFileReturnsMissingFileError(t *testing.T) {
 	}
 }
 
+func TestWriteSkeletonConfig(t *testing.T) {
+	configFile := t.TempDir() + "/search.yml"
+	if err := writeSkeletonConfig(configFile, false); err != nil {
+		t.Fatalf("write skeleton config: %v", err)
+	}
+
+	data, err := os.ReadFile(configFile)
+	if err != nil {
+		t.Fatalf("read skeleton config: %v", err)
+	}
+	if string(data) != skeletonSearchConfig {
+		t.Fatalf("unexpected skeleton config contents: %q", string(data))
+	}
+
+	config, err := loadSearchConfig(configFile)
+	if err != nil {
+		t.Fatalf("skeleton config should parse: %v", err)
+	}
+	if strings.TrimSpace(config.Search) == "" {
+		t.Fatal("expected skeleton config search content")
+	}
+}
+
+func TestWriteSkeletonConfigRefusesOverwrite(t *testing.T) {
+	configFile := t.TempDir() + "/search.yml"
+	if err := os.WriteFile(configFile, []byte("existing"), 0644); err != nil {
+		t.Fatalf("write existing config: %v", err)
+	}
+
+	err := writeSkeletonConfig(configFile, false)
+	if err == nil {
+		t.Fatal("expected overwrite error")
+	}
+}
+
+func TestWriteSkeletonConfigForceOverwrites(t *testing.T) {
+	configFile := t.TempDir() + "/search.yml"
+	if err := os.WriteFile(configFile, []byte("existing"), 0644); err != nil {
+		t.Fatalf("write existing config: %v", err)
+	}
+
+	if err := writeSkeletonConfig(configFile, true); err != nil {
+		t.Fatalf("force write skeleton config: %v", err)
+	}
+
+	data, err := os.ReadFile(configFile)
+	if err != nil {
+		t.Fatalf("read skeleton config: %v", err)
+	}
+	if string(data) != skeletonSearchConfig {
+		t.Fatalf("expected overwritten skeleton config, got %q", string(data))
+	}
+}
+
 func TestLoadSearchConfig(t *testing.T) {
 	configFile := t.TempDir() + "/search.yml"
 	content := `app: search

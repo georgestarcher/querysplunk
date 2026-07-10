@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -73,6 +74,54 @@ func readSearchFile(path string) (string, error) {
 		return "", fmt.Errorf("SPL query file %q is empty", path)
 	}
 	return search, nil
+}
+
+const skeletonSearchConfig = `app: search
+output_file: splunkresults.json
+search: |
+  search index=_internal earliest=-15m
+  | head 1
+
+dispatch:
+  earliest_time: "-15m"
+  latest_time: "now"
+  max_count: 50000
+  status_buckets: 0
+  required_fields:
+    - sourcetype
+
+results:
+  output_mode: json
+  count: 0
+  offset: 0
+
+diagnostics:
+  search_log: summary
+  # search_log_file: splunkresults.search.log
+`
+
+func writeSkeletonConfig(path string, force bool) error {
+	if strings.TrimSpace(path) == "" {
+		return errors.New("config output path is required")
+	}
+	flags := os.O_WRONLY | os.O_CREATE
+	if force {
+		flags |= os.O_TRUNC
+	} else {
+		flags |= os.O_EXCL
+	}
+
+	file, err := os.OpenFile(path, flags, 0644)
+	if err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return fmt.Errorf("config file %q already exists; use -force to overwrite", path)
+		}
+		return err
+	}
+	defer file.Close()
+
+	_, err = file.WriteString(skeletonSearchConfig)
+	return err
 }
 
 type searchConfig struct {
@@ -174,6 +223,8 @@ func main() {
 	var useEnvFile bool
 	var appContext string
 	var configFile string
+	var writeConfigFile string
+	var forceWrite bool
 
 	log.SetFlags(0)
 	log.SetOutput(new(logWriter))
@@ -181,10 +232,20 @@ func main() {
 	flag.BoolVar(&useEnvFile, "e", false, "Use .env file")
 	flag.StringVar(&appContext, "app", "", "Splunk app context (namespace) for query execution")
 	flag.StringVar(&configFile, "config", "", "Read structured search config from this YAML file")
+	flag.StringVar(&writeConfigFile, "write-config", "", "Write a starter structured YAML config file and exit")
+	flag.BoolVar(&forceWrite, "force", false, "Allow -write-config to overwrite an existing file")
 	flag.StringVar(&queryFile, "q", "query.txt", "Read the SPL search from this file")
 	flag.StringVar(&outputFile, "o", "splunkresults.json", "Write Splunk results to this JSON file")
 	flag.Parse()
 	flagsSet := explicitFlags()
+
+	if writeConfigFile != "" {
+		if err := writeSkeletonConfig(writeConfigFile, forceWrite); err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("SUCCESS: Wrote starter config to %s", writeConfigFile)
+		return
+	}
 
 	if useEnvFile {
 		if err := godotenv.Load(); err != nil {
