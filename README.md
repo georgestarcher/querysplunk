@@ -365,6 +365,12 @@ release:
 - `splunkquery-vX.Y.Z-windows-amd64.zip`
 - `checksums.txt`
 
+Each platform archive is a self-contained CLI bundle. It includes the
+`splunkquery` binary, this README, `examples/health/`, and
+`.agents/skills/querysplunk/` for local AI-assistant workflows. The `.agents`
+content is an operating runbook for assistant tooling; it is not loaded by the
+`querysplunk` binary.
+
 To test release packaging in GitHub before tagging, run the `Release` workflow
 manually and use a dry-run version such as `v0.0.0-dryrun`.
 
@@ -372,4 +378,5 @@ For local release-style packages, run:
 
 ```bash
 make clean package VERSION=v1.1.0
+make verify-package
 ```

@@ -47,30 +47,10 @@ jobs:
             *) echo "version must start with v, got ${VERSION}"; exit 1 ;;
           esac
 
-          rm -rf build dist
-          mkdir -p build dist
+          scripts/package-release.sh "${VERSION}" splunkquery dist
 
-          build() {
-            local goos="$1"
-            local goarch="$2"
-            local ext="${3:-}"
-            local name="splunkquery-${VERSION}-${goos}-${goarch}"
-            local output="build/${name}${ext}"
-            CGO_ENABLED=0 GOOS="${goos}" GOARCH="${goarch}" go build -trimpath -ldflags="-s -w" -o "${output}" .
-            if [ "${goos}" = "windows" ]; then
-              zip -j "dist/${name}.zip" "${output}"
-            else
-              tar -C build -czf "dist/${name}.tar.gz" "${name}"
-            fi
-          }
-
-          build darwin amd64
-          build darwin arm64
-          build linux amd64
-          build linux arm64
-          build windows amd64 .exe
-
-          (cd dist && sha256sum * > checksums.txt)
+      - name: Verify release archive contents
+        run: scripts/verify-package-contents.sh dist
 
       - name: Upload release assets
         uses: actions/upload-artifact@v4
