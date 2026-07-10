@@ -1,12 +1,15 @@
-# splunkquery
+# querysplunk
 
 ## Requirements
+
 Go 1.26+ is required.
 
 ## Dependencies
-If you build from source you will need package(s)
-* https://github.com/joho/godotenv
-* https://gopkg.in/yaml.v3
+
+If you build from source, Go resolves these dependencies automatically:
+
+- https://github.com/joho/godotenv
+- https://gopkg.in/yaml.v3
 
 ## Quick setup
 
@@ -16,10 +19,12 @@ brew install go
 brew upgrade go
 ```
 
-## .env File:
-You may use a .env file with the `-e` flag. Otherwise the tool reads the following from OS Environment Variables.
+## Configuration environment
 
-```
+You may use a `.env` file with the `-e` flag. Otherwise, the tool reads these
+values from operating system environment variables.
+
+```text
 SPLUNKUSERNAME=
 SPLUNKPASSWORD=
 SPLUNKBASEURL=
@@ -29,23 +34,31 @@ SPLUNKTLSVERIFY=true
 SPLUNKAPP=
 ```
 
-* You can use credentials or a Splunk Authentication token. If you use SPLUNKTOKEN it will ignore the credentials or lack of them.
-* You can set SPLUNKTLSVERIFY to false to avoid validating a Splunk TLS Certificate. If not set, TLS verification defaults to true.
-* SPLUNKTIMEOUT will default to 120 seconds if not specified. This is the max time the program will keep checking for the dispatched query to reach a DONE state. If the local timeout expires after a search job has been created, the tool attempts to cancel the remote Splunk job before exiting.
-* Use `SPLUNKAPP` (or `-app`) to scope the search to a Splunk app namespace.
+- Use either a Splunk token or username/password credentials. If `SPLUNKTOKEN`
+  is set, token authentication is used and credentials are ignored.
+- `SPLUNKTLSVERIFY=false` disables Splunk TLS certificate validation. If unset,
+  TLS verification defaults to `true`.
+- `SPLUNKTIMEOUT` defaults to `120` seconds. This is the maximum time the tool
+  waits for a dispatched search job to reach `DONE`. If the local timeout
+  expires after a job has been created, the tool attempts to cancel the remote
+  Splunk job before exiting.
+- Use `SPLUNKAPP` or `-app` to scope the search to a Splunk app namespace.
 
 ## SPL query file
 
-The tool reads the SPL search from a file. By default it reads `query.txt`.
+The tool reads the SPL search from a file. By default, it reads `query.txt`.
 Use `-q` to provide a different file, such as `investigation.spl`.
 
-It is recommended to make your SPL search in Splunk as a saved search. Then make your query file contents like the following.
-
-Bonus that this method of calling a savedsearch works great from SOAR products or SplunkES correlation search drill down fields. I recommend putting such Investigation searches into a SplunkES story as a supporting search. This lets you keep SPL complexity in Splunk as well as document the search there.
+For complex investigations, consider keeping the SPL in Splunk as a saved
+search and calling it from the query file:
 
 ```
 savedsearch "SOAR - Auth Model - Investigation" user=bob
 ```
+
+This pattern works well from SOAR products or Splunk Enterprise Security
+correlation search drilldown fields. It keeps SPL complexity, permissions, and
+documentation in Splunk while the CLI only passes runtime arguments.
 
 ## Structured YAML search config
 
@@ -152,28 +165,30 @@ diagnostics. Large diagnostic output is bounded before being written to logs.
 
 ## Usage
 
-1. place the .env file with the desired executable binary
+Place the `.env` file next to the executable when using `-e`.
 
 ### help
+
 ```
 ./splunkquery-darwin -h
 ```
 
+```text
 Usage of ./splunkquery-darwin:
-  -config string
-        Read structured search config from this YAML file
-  -e
-        Use .env file
-  -force
-        Allow -write-config to overwrite an existing file
-  -o string
-        Write Splunk results to this JSON file. (default "splunkresults.json")
   -app string
-        Splunk app context (namespace) for query execution
+    	Splunk app context (namespace) for query execution
+  -config string
+    	Read structured search config from this YAML file
+  -e	Use .env file
+  -force
+    	Allow -write-config to overwrite an existing file
+  -o string
+    	Write Splunk results to this JSON file (default "splunkresults.json")
   -q string
-        Read the SPL search from this file. (default "query.txt")
+    	Read the SPL search from this file (default "query.txt")
   -write-config string
-        Write a starter structured YAML config file and exit
+    	Write a starter structured YAML config file and exit
+```
 
 ### integration tests
 
@@ -183,7 +198,7 @@ Run:
 
 ```bash
 cd splunk
-go test -tags integration ./...
+go test -v -tags integration ./...
 ```
 
 Required environment variables for integration runs:
@@ -219,9 +234,8 @@ Optional environment secrets:
 - `SPLUNKAPP`
 - `SPLUNK_INTEGRATION_QUERY`
 
-`SPLUNK_INTEGRATION_QUERY` is optional; the default query is:
-
-`search index=_internal | head 1`
+`SPLUNK_INTEGRATION_QUERY` is optional. If it is not set, the integration test
+uses the repository `query.txt`.
 
 You can also pass integration values through the normal environment path as
 an alternative to repository secrets.
