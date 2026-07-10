@@ -3,10 +3,12 @@ package splunk
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -116,9 +118,14 @@ func TestDispatchQueryWritesResultsOnDone(t *testing.T) {
 				t.Fatalf("unexpected write error: %v", err)
 			}
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/services/search/jobs/"+sid):
-			w.Header().Set("Content-Type", "application/xml")
-			response := `<entry><content><dict><key name="dispatchState">DONE</key></dict></content></entry>`
+			w.Header().Set("Content-Type", "application/json")
+			response := `{"entry":[{"content":{"dispatchState":"DONE","doneProgress":1,"scanCount":10,"eventCount":2,"resultCount":1}}]}`
 			_, err := w.Write([]byte(response))
+			if err != nil {
+				t.Fatalf("unexpected write error: %v", err)
+			}
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/services/search/jobs/"+sid+"/search.log"):
+			_, err := w.Write([]byte("INFO Search completed in 1.23 seconds\nWARN DispatchThread - non-fatal warning"))
 			if err != nil {
 				t.Fatalf("unexpected write error: %v", err)
 			}
@@ -154,6 +161,12 @@ func TestDispatchQueryWritesResultsOnDone(t *testing.T) {
 	if strings.TrimSpace(string(actual)) != resultsPayload {
 		t.Fatalf("unexpected output file contents: %q", string(actual))
 	}
+	if query.LogDiagnostics.ExecutionDuration != "1.23 seconds" {
+		t.Fatalf("expected execution duration from search.log, got %q", query.LogDiagnostics.ExecutionDuration)
+	}
+	if len(query.LogDiagnostics.Warnings) != 1 {
+		t.Fatalf("expected one warning from search.log, got %#v", query.LogDiagnostics.Warnings)
+	}
 }
 
 func TestDispatchQuerySendsNamespaceWhenSet(t *testing.T) {
@@ -181,9 +194,20 @@ func TestDispatchQuerySendsNamespaceWhenSet(t *testing.T) {
 			if got := r.FormValue("namespace"); got != "security" {
 				t.Fatalf("expected namespace 'security', got %q", got)
 			}
-			w.Header().Set("Content-Type", "application/xml")
-			response := `<entry><content><dict><key name="dispatchState">DONE</key></dict></content></entry>`
+			w.Header().Set("Content-Type", "application/json")
+			response := `{"entry":[{"content":{"dispatchState":"DONE"}}]}`
 			_, err := w.Write([]byte(response))
+			if err != nil {
+				t.Fatalf("unexpected write error: %v", err)
+			}
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/services/search/jobs/"+sid+"/search.log"):
+			if err := r.ParseForm(); err != nil {
+				t.Fatalf("unexpected parse error: %v", err)
+			}
+			if got := r.FormValue("namespace"); got != "security" {
+				t.Fatalf("expected namespace 'security', got %q", got)
+			}
+			_, err := w.Write([]byte("INFO Search completed in 1 seconds"))
 			if err != nil {
 				t.Fatalf("unexpected write error: %v", err)
 			}
@@ -232,9 +256,14 @@ func TestDispatchQueryReturnsErrorOnResultFetchFailure(t *testing.T) {
 				t.Fatalf("unexpected write error: %v", err)
 			}
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/services/search/jobs/"+sid):
-			w.Header().Set("Content-Type", "application/xml")
-			response := `<entry><content><dict><key name="dispatchState">DONE</key></dict></content></entry>`
+			w.Header().Set("Content-Type", "application/json")
+			response := `{"entry":[{"content":{"dispatchState":"DONE"}}]}`
 			_, err := w.Write([]byte(response))
+			if err != nil {
+				t.Fatalf("unexpected write error: %v", err)
+			}
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/services/search/jobs/"+sid+"/search.log"):
+			_, err := w.Write([]byte("INFO Search completed in 1 seconds"))
 			if err != nil {
 				t.Fatalf("unexpected write error: %v", err)
 			}
@@ -268,38 +297,95 @@ func TestDispatchQueryReturnsErrorOnResultFetchFailure(t *testing.T) {
 }
 
 func TestJobStatusReturnsErrorOnFailedState(t *testing.T) {
-	sid := "sid-fail"
+	terminalStates := []string{
+		dispatchStateFailed,
+		dispatchStateCancelled,
+		dispatchStateInternalCancel,
+		dispatchStateUserCancel,
+		dispatchStateBadInputCancel,
+		dispatchStateQuit,
+		dispatchStatePause,
+		dispatchStatePaused,
+	}
+
+	for _, state := range terminalStates {
+		t.Run(state, func(t *testing.T) {
+			sid := "sid-" + strings.ToLower(state)
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				response := fmt.Sprintf(`{"entry":[{"content":{"dispatchState":%q}}]}`, state)
+				_, err := w.Write([]byte(response))
+				if err != nil {
+					t.Fatalf("unexpected write error: %v", err)
+				}
+			}))
+			defer ts.Close()
+
+			conn := SplunkConnection{
+				AuthToken:    "token",
+				BaseURL:      ts.URL,
+				Timeout:      30 * time.Second,
+				PollInterval: time.Millisecond,
+			}
+			query := SplunkQuery{Job: SplunkJob{Sid: sid}}
+			err := conn.jobStatus(context.Background(), &query)
+			if err == nil {
+				t.Fatal("expected terminal state error")
+			}
+			if !strings.Contains(err.Error(), state) {
+				t.Fatalf("expected state %s in error, got %v", state, err)
+			}
+		})
+	}
+}
+
+func TestJobStatusCancelsRemoteJobOnContextCancelAfterSidExists(t *testing.T) {
+	sid := "sid-timeout"
+	var controlCalls atomic.Int32
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/xml")
-		response := `<entry><content><dict><key name="dispatchState">FAILED</key></dict></content></entry>`
-		_, err := w.Write([]byte(response))
-		if err != nil {
-			t.Fatalf("unexpected write error: %v", err)
+		if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/services/search/jobs/"+sid+"/control") {
+			controlCalls.Add(1)
+			if err := r.ParseForm(); err != nil {
+				t.Fatalf("unexpected parse error: %v", err)
+			}
+			if got := r.FormValue("action"); got != "cancel" {
+				t.Fatalf("expected cancel action, got %q", got)
+			}
+			return
 		}
+		t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
 	}))
 	defer ts.Close()
 
 	conn := SplunkConnection{
-		AuthToken: "token",
-		BaseURL:   ts.URL,
-		Timeout:   30 * time.Second,
+		AuthToken:    "token",
+		BaseURL:      ts.URL,
+		Timeout:      30 * time.Second,
+		PollInterval: time.Millisecond,
 	}
 	query := SplunkQuery{Job: SplunkJob{Sid: sid}}
-	err := conn.jobStatus(context.Background(), &query)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := conn.jobStatus(ctx, &query)
 	if err == nil {
-		t.Fatal("expected terminal state error")
+		t.Fatal("expected context cancellation")
 	}
-	if !strings.Contains(err.Error(), dispatchStateFailed) {
-		t.Fatalf("expected failed state in error, got %v", err)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context canceled, got %v", err)
+	}
+	if got := controlCalls.Load(); got != 1 {
+		t.Fatalf("expected one remote cancel call, got %d", got)
 	}
 }
 
-func TestJobStatusRespectsContextCancel(t *testing.T) {
+func TestJobStatusDoesNotCancelRemoteJobWithoutSid(t *testing.T) {
 	conn := SplunkConnection{
 		AuthToken: "token",
 		Timeout:   30 * time.Second,
 	}
-	query := SplunkQuery{Job: SplunkJob{Sid: "sid-timeout"}}
+	query := SplunkQuery{}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -311,5 +397,78 @@ func TestJobStatusRespectsContextCancel(t *testing.T) {
 	}
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected context canceled, got %v", err)
+	}
+}
+
+func TestDispatchQueryFetchesSearchLogOnFailedJob(t *testing.T) {
+	sid := "sid-failure-log"
+	var searchLogCalls atomic.Int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/services/search/jobs/":
+			w.Header().Set("Content-Type", "application/xml")
+			_, err := w.Write([]byte(`<response><sid>` + sid + `</sid></response>`))
+			if err != nil {
+				t.Fatalf("unexpected write error: %v", err)
+			}
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/services/search/jobs/"+sid):
+			w.Header().Set("Content-Type", "application/json")
+			_, err := w.Write([]byte(`{"entry":[{"content":{"dispatchState":"FAILED"}}]}`))
+			if err != nil {
+				t.Fatalf("unexpected write error: %v", err)
+			}
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/services/search/jobs/"+sid+"/search.log"):
+			searchLogCalls.Add(1)
+			_, err := w.Write([]byte("ERROR DispatchThread - failed to run search"))
+			if err != nil {
+				t.Fatalf("unexpected write error: %v", err)
+			}
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer ts.Close()
+
+	conn := SplunkConnection{
+		AuthToken:    "token",
+		BaseURL:      ts.URL,
+		Timeout:      5 * time.Second,
+		PollInterval: time.Millisecond,
+	}
+	query := SplunkQuery{Query: "search index=_internal | head 1"}
+	err := conn.DispatchQuery(context.Background(), &query, t.TempDir()+"/out.json")
+	if err == nil {
+		t.Fatal("expected failed job error")
+	}
+	if got := searchLogCalls.Load(); got != 1 {
+		t.Fatalf("expected one search.log fetch, got %d", got)
+	}
+	if len(query.LogDiagnostics.Errors) != 1 {
+		t.Fatalf("expected one diagnostic error from search.log, got %#v", query.LogDiagnostics.Errors)
+	}
+}
+
+func TestAnalyzeJobLogExtractsDurationAndBoundsDiagnostics(t *testing.T) {
+	var builder strings.Builder
+	builder.WriteString("INFO DispatchThread - completed in 2.45 seconds\n")
+	for i := 0; i < maxDiagnosticLines+5; i++ {
+		builder.WriteString("ERROR SearchOperator - ")
+		builder.WriteString(strings.Repeat("x", maxDiagnosticLineLength+20))
+		builder.WriteString("\n")
+	}
+	builder.WriteString("WARN DispatchThread - this warning should be bounded by count\n")
+
+	diagnostics := AnalyzeJobLog(builder.String())
+	if diagnostics.ExecutionDuration != "2.45 seconds" {
+		t.Fatalf("expected duration, got %q", diagnostics.ExecutionDuration)
+	}
+	if len(diagnostics.Errors) != maxDiagnosticLines {
+		t.Fatalf("expected bounded diagnostic error count %d, got %d", maxDiagnosticLines, len(diagnostics.Errors))
+	}
+	if !strings.Contains(diagnostics.Errors[0], "[truncated]") {
+		t.Fatalf("expected long diagnostic line to be truncated, got %q", diagnostics.Errors[0])
+	}
+	if len(diagnostics.Warnings) != 1 {
+		t.Fatalf("expected warning diagnostics to be bounded independently from errors, got %#v", diagnostics.Warnings)
 	}
 }
