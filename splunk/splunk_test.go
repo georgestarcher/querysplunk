@@ -29,6 +29,20 @@ func TestHTTPCallReturnsErrorOnNon2xx(t *testing.T) {
 	if !strings.Contains(err.Error(), "502") {
 		t.Fatalf("expected status code in error, got %v", err)
 	}
+	if !strings.Contains(err.Error(), "scheme=http") {
+		t.Fatalf("expected sanitized URL in error, got %v", err)
+	}
+}
+
+func TestSafeURLForLogRemovesSensitiveURLParts(t *testing.T) {
+	got := safeURLForLog("https://user:pass@splunk.example.com:8089/services/search/jobs/?token=secret")
+	want := "scheme=https host=splunk.example.com:8089 path=/services/search/jobs/"
+	if got != want {
+		t.Fatalf("expected %q, got %q", want, got)
+	}
+	if strings.Contains(got, "user") || strings.Contains(got, "pass") || strings.Contains(got, "token") || strings.Contains(got, "secret") {
+		t.Fatalf("sanitized URL leaked sensitive content: %q", got)
+	}
 }
 
 func TestDispatchQueryReturnsErrorOnMalformedJobResponse(t *testing.T) {

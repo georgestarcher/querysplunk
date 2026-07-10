@@ -160,9 +160,33 @@ func (conn SplunkConnection) httpCall(ctx context.Context, requestURL string, me
 		return "", readErr
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return "", fmt.Errorf("request failed with status %s: %s", response.Status, strings.TrimSpace(string(body)))
+		return "", fmt.Errorf("request failed with status %s for %s: %s", response.Status, safeURLForLog(requestURL), responseBodyForError(body))
 	}
 	return string(body), nil
+}
+
+func responseBodyForError(body []byte) string {
+	const maxErrorBodyBytes = 2048
+
+	trimmedBody := strings.TrimSpace(string(body))
+	if len(trimmedBody) <= maxErrorBodyBytes {
+		return trimmedBody
+	}
+	return fmt.Sprintf("%s... [truncated %d bytes]", trimmedBody[:maxErrorBodyBytes], len(trimmedBody)-maxErrorBodyBytes)
+}
+
+func safeURLForLog(rawURL string) string {
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		return "url=<invalid>"
+	}
+
+	path := parsedURL.EscapedPath()
+	if path == "" {
+		path = "/"
+	}
+
+	return fmt.Sprintf("scheme=%s host=%s path=%s", parsedURL.Scheme, parsedURL.Host, path)
 }
 
 func (conn SplunkConnection) addAuthHeader(request *http.Request) {

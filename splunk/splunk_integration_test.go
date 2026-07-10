@@ -24,6 +24,7 @@ func TestDispatchQueryIntegration(t *testing.T) {
 	if queryString == "" {
 		queryString = "search index=_internal | head 1"
 	}
+	t.Logf("testing Splunk integration with base URL %s", safeURLForLog(baseURL))
 
 	if token == "" && (username == "" || password == "") {
 		t.Skip("provide either SPLUNKTOKEN or both SPLUNKUSERNAME and SPLUNKPASSWORD")
