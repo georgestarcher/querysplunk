@@ -2,7 +2,7 @@ app: search
 output_file: license-warnings.json
 mode: job
 search: |
-  index=_internal earliest=-24h (component=LicenseUsage OR component=LicenseManager)
+  search index=_internal earliest=-24h (component=LicenseUsage OR component=LicenseManager)
   | stats count latest(_raw) as latest_message by host component log_level
   | sort - count
 dispatch:

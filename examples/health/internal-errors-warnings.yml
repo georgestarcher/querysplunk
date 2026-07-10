@@ -2,7 +2,7 @@ app: search
 output_file: internal-errors-warnings.json
 mode: job
 search: |
-  index=_internal earliest=-1h (log_level=error OR log_level=warn*)
+  search index=_internal earliest=-1h (log_level=error OR log_level=warn*)
   | stats count latest(_raw) as latest_message by host source sourcetype log_level component
   | sort - count
 dispatch:

@@ -128,3 +128,13 @@ jobs:
           SPLUNK_INTEGRATION_QUERY: ${{ secrets.SPLUNK_INTEGRATION_QUERY }}
         working-directory: splunk
         run: go test -v -tags integration ./...
+      - name: Test live YAML config integration
+        env:
+          SPLUNKBASEURL: ${{ secrets.SPLUNKBASEURL }}
+          SPLUNKUSERNAME: ${{ secrets.SPLUNKUSERNAME }}
+          SPLUNKPASSWORD: ${{ secrets.SPLUNKPASSWORD }}
+          SPLUNKTOKEN: ${{ secrets.SPLUNKTOKEN }}
+          SPLUNKTLSVERIFY: ${{ secrets.SPLUNKTLSVERIFY }}
+          SPLUNKTIMEOUT: ${{ secrets.SPLUNKTIMEOUT }}
+          SPLUNKAPP: ${{ secrets.SPLUNKAPP }}
+        run: go test -v -tags integration ./...
