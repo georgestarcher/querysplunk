@@ -45,6 +45,36 @@ func TestSafeURLForLogRemovesSensitiveURLParts(t *testing.T) {
 	}
 }
 
+func TestLoginValidatesAuthTokenWithCurrentContext(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/services/authentication/current-context" {
+			t.Fatalf("expected current-context auth check, got path %q", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer token" {
+			t.Fatalf("expected bearer token auth header, got %q", got)
+		}
+		if got := r.URL.Query().Get("output_mode"); got != "json" {
+			t.Fatalf("expected output_mode=json, got %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, err := w.Write([]byte(`{"entry":[]}`))
+		if err != nil {
+			t.Fatalf("unexpected write error: %v", err)
+		}
+	}))
+	defer ts.Close()
+
+	conn := SplunkConnection{
+		AuthToken: "token",
+		BaseURL:   ts.URL,
+		Timeout:   5 * time.Second,
+	}
+
+	if err := conn.Login(context.Background()); err != nil {
+		t.Fatalf("expected auth validation success, got %v", err)
+	}
+}
+
 func TestDispatchQueryReturnsErrorOnMalformedJobResponse(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/services/search/jobs/" {

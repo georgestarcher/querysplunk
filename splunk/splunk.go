@@ -204,9 +204,8 @@ func (conn SplunkConnection) addAuthHeader(request *http.Request) {
 
 // Login connects to the Splunk server and retrieves a session key.
 func (conn *SplunkConnection) Login(ctx context.Context) error {
-	// exit early if auth token is already configured.
 	if conn.AuthToken != "" {
-		return nil
+		return conn.ValidateAuth(ctx)
 	}
 	if conn.Username == "" || conn.Password == "" {
 		return errors.New("SPLUNKUSERNAME and SPLUNKPASSWORD are required when SPLUNKTOKEN is not set")
@@ -232,6 +231,17 @@ func (conn *SplunkConnection) Login(ctx context.Context) error {
 		return errors.New("could not parse sessionKey from login response")
 	}
 	conn.SessionKey = key
+	return nil
+}
+
+// ValidateAuth checks that the configured authentication can access the Splunk REST API.
+func (conn SplunkConnection) ValidateAuth(ctx context.Context) error {
+	data := make(url.Values)
+	data.Add("output_mode", "json")
+	_, err := conn.httpGet(ctx, fmt.Sprintf("%s/services/authentication/current-context", conn.BaseURL), &data)
+	if err != nil {
+		return fmt.Errorf("validate splunk authentication: %w", err)
+	}
 	return nil
 }
 
