@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version label to use for a dry-run artifact build"
+        required: true
+        default: "v0.0.0-dryrun"
 
 permissions:
   contents: write
@@ -27,18 +33,35 @@ jobs:
           (cd splunk && go test ./...)
 
       - name: Build release assets
-        env:
-          VERSION: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          mkdir -p dist
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME}"
+          fi
+
+          case "${VERSION}" in
+            v*) ;;
+            *) echo "version must start with v, got ${VERSION}"; exit 1 ;;
+          esac
+
+          rm -rf build dist
+          mkdir -p build dist
 
           build() {
             local goos="$1"
             local goarch="$2"
             local ext="${3:-}"
-            local output="dist/splunkquery-${VERSION}-${goos}-${goarch}${ext}"
+            local name="splunkquery-${VERSION}-${goos}-${goarch}"
+            local output="build/${name}${ext}"
             CGO_ENABLED=0 GOOS="${goos}" GOARCH="${goarch}" go build -trimpath -ldflags="-s -w" -o "${output}" .
+            if [ "${goos}" = "windows" ]; then
+              zip -j "dist/${name}.zip" "${output}"
+            else
+              tar -C build -czf "dist/${name}.tar.gz" "${name}"
+            fi
           }
 
           build darwin amd64
@@ -49,7 +72,14 @@ jobs:
 
           (cd dist && sha256sum * > checksums.txt)
 
+      - name: Upload release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets
+          path: dist/*
+
       - name: Create GitHub release
+        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

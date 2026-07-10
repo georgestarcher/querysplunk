@@ -116,7 +116,9 @@ an alternative to repository secrets.
 
 ## Release
 
-Releases are built by GitHub Actions when a version tag is pushed.
+Releases are built by GitHub Actions when a version tag is pushed. The release
+workflow can also be run manually to dry-run packaging without creating a
+GitHub Release.
 
 Before tagging, merge the release branch to `main` and make sure the `Go`
 workflow passes. To create a release:
@@ -131,15 +133,18 @@ git push origin v1.1.0
 The `Release` workflow builds these assets and uploads them to the GitHub
 release:
 
-- `splunkquery-vX.Y.Z-darwin-amd64`
-- `splunkquery-vX.Y.Z-darwin-arm64`
-- `splunkquery-vX.Y.Z-linux-amd64`
-- `splunkquery-vX.Y.Z-linux-arm64`
-- `splunkquery-vX.Y.Z-windows-amd64.exe`
+- `splunkquery-vX.Y.Z-darwin-amd64.tar.gz`
+- `splunkquery-vX.Y.Z-darwin-arm64.tar.gz`
+- `splunkquery-vX.Y.Z-linux-amd64.tar.gz`
+- `splunkquery-vX.Y.Z-linux-arm64.tar.gz`
+- `splunkquery-vX.Y.Z-windows-amd64.zip`
 - `checksums.txt`
 
-For local release-style builds, run:
+To test release packaging in GitHub before tagging, run the `Release` workflow
+manually and use a dry-run version such as `v0.0.0-dryrun`.
+
+For local release-style packages, run:
 
 ```bash
-make clean build
+make clean package VERSION=v1.1.0
 ```
