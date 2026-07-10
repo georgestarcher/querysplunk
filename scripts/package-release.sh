@@ -13,6 +13,7 @@ esac
 
 rm -rf "${build_dir}" "${dist_dir}"
 mkdir -p "${build_dir}" "${dist_dir}"
+dist_abs="$(cd "${dist_dir}" && pwd)"
 
 copy_bundle_files() {
   local package_dir="$1"
@@ -36,9 +37,9 @@ build_package() {
   copy_bundle_files "${package_dir}"
 
   if [ "${goos}" = "windows" ]; then
-    (cd "${build_dir}" && zip -qr "../${dist_dir}/${name}.zip" "${name}")
+    (cd "${build_dir}" && zip -qr "${dist_abs}/${name}.zip" "${name}")
   else
-    tar -C "${build_dir}" -czf "${dist_dir}/${name}.tar.gz" "${name}"
+    tar -C "${build_dir}" -czf "${dist_abs}/${name}.tar.gz" "${name}"
   fi
 }
 
