@@ -217,6 +217,33 @@ func resultParams(config resultsConfig) map[string][]string {
 	return params
 }
 
+func usage() {
+	output := flag.CommandLine.Output()
+	_, _ = fmt.Fprintln(output, `Usage:
+  querysplunk [options]
+
+Run a Splunk search from a plain SPL file or from a structured YAML config.
+
+Examples:
+  querysplunk -q query.txt -o splunkresults.json
+  querysplunk -config search.yml
+  querysplunk -write-config search.yml
+  querysplunk -write-config search.yml -force
+
+Authentication and connection settings are read from environment variables:
+  SPLUNKBASEURL
+  SPLUNKTOKEN
+  SPLUNKUSERNAME / SPLUNKPASSWORD
+  SPLUNKTLSVERIFY
+  SPLUNKTIMEOUT
+  SPLUNKAPP
+
+Use -e to load those values from a .env file in the working directory.
+
+Options:`)
+	flag.PrintDefaults()
+}
+
 func main() {
 	var queryFile string
 	var outputFile string
@@ -228,14 +255,15 @@ func main() {
 
 	log.SetFlags(0)
 	log.SetOutput(new(logWriter))
+	flag.Usage = usage
 
-	flag.BoolVar(&useEnvFile, "e", false, "Use .env file")
-	flag.StringVar(&appContext, "app", "", "Splunk app context (namespace) for query execution")
-	flag.StringVar(&configFile, "config", "", "Read structured search config from this YAML file")
-	flag.StringVar(&writeConfigFile, "write-config", "", "Write a starter structured YAML config file and exit")
+	flag.BoolVar(&useEnvFile, "e", false, "Load Splunk connection settings from .env")
+	flag.StringVar(&appContext, "app", "", "Override Splunk app context / namespace for the search")
+	flag.StringVar(&configFile, "config", "", "Run a structured YAML search config")
+	flag.StringVar(&writeConfigFile, "write-config", "", "Write a starter YAML search config and exit")
 	flag.BoolVar(&forceWrite, "force", false, "Allow -write-config to overwrite an existing file")
-	flag.StringVar(&queryFile, "q", "query.txt", "Read the SPL search from this file")
-	flag.StringVar(&outputFile, "o", "splunkresults.json", "Write Splunk results to this JSON file")
+	flag.StringVar(&queryFile, "q", "query.txt", "Read the SPL search from this plain text file")
+	flag.StringVar(&outputFile, "o", "splunkresults.json", "Write Splunk results to this file")
 	flag.Parse()
 	flagsSet := explicitFlags()
 

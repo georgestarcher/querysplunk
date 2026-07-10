@@ -174,20 +174,41 @@ Place the `.env` file next to the executable when using `-e`.
 ```
 
 ```text
-Usage of ./splunkquery-darwin:
+Usage:
+  querysplunk [options]
+
+Run a Splunk search from a plain SPL file or from a structured YAML config.
+
+Examples:
+  querysplunk -q query.txt -o splunkresults.json
+  querysplunk -config search.yml
+  querysplunk -write-config search.yml
+  querysplunk -write-config search.yml -force
+
+Authentication and connection settings are read from environment variables:
+  SPLUNKBASEURL
+  SPLUNKTOKEN
+  SPLUNKUSERNAME / SPLUNKPASSWORD
+  SPLUNKTLSVERIFY
+  SPLUNKTIMEOUT
+  SPLUNKAPP
+
+Use -e to load those values from a .env file in the working directory.
+
+Options:
   -app string
-    	Splunk app context (namespace) for query execution
+    	Override Splunk app context / namespace for the search
   -config string
-    	Read structured search config from this YAML file
-  -e	Use .env file
+    	Run a structured YAML search config
+  -e	Load Splunk connection settings from .env
   -force
     	Allow -write-config to overwrite an existing file
   -o string
-    	Write Splunk results to this JSON file (default "splunkresults.json")
+    	Write Splunk results to this file (default "splunkresults.json")
   -q string
-    	Read the SPL search from this file (default "query.txt")
+    	Read the SPL search from this plain text file (default "query.txt")
   -write-config string
-    	Write a starter structured YAML config file and exit
+    	Write a starter YAML search config and exit
 ```
 
 ### integration tests
