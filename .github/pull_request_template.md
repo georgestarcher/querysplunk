@@ -6,14 +6,16 @@
 
 - [ ] `go test ./...`
 - [ ] `(cd splunk && go test ./...)`
-- [ ] `go build ./...`
-- [ ] `(cd splunk && go build ./...)`
+- [ ] `go test -race ./...`
+- [ ] `(cd splunk && go test -race ./...)`
+- [ ] `go vet ./...`
+- [ ] `(cd splunk && go vet ./...)`
 - [ ] GitHub Actions passed
 
 ## Splunk Integration Impact
 
 - [ ] No live Splunk behavior changed
-- [ ] Live Splunk behavior changed and integration testing was run
+- [ ] Live Splunk behavior changed and manual integration testing was run
 - [ ] Not applicable
 
 Notes:

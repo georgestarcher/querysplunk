@@ -1,5 +1,9 @@
 # querysplunk
 
+`querysplunk` runs Splunk searches from a plain SPL file or a structured YAML
+config, writes the raw Splunk response body to disk, and can summarize
+`search.log` diagnostics for completed jobs.
+
 ## Requirements
 
 Go 1.26+ is required.
@@ -19,10 +23,17 @@ brew install go
 brew upgrade go
 ```
 
+Build the CLI locally:
+
+```bash
+go build -o querysplunk .
+```
+
 ## Configuration environment
 
-You may use a `.env` file with the `-e` flag. Otherwise, the tool reads these
-values from operating system environment variables.
+By default, the tool reads connection settings from operating system
+environment variables. Use `-e` to load a file named `.env` from the current
+working directory before reading the environment.
 
 ```text
 SPLUNKUSERNAME=
@@ -36,6 +47,8 @@ SPLUNKAPP=
 
 - Use either a Splunk token or username/password credentials. If `SPLUNKTOKEN`
   is set, token authentication is used and credentials are ignored.
+- `SPLUNKBASEURL` should point to the Splunk management API, typically ending
+  in port `8089`.
 - `SPLUNKTLSVERIFY=false` disables Splunk TLS certificate validation. If unset,
   TLS verification defaults to `true`.
 - `SPLUNKTIMEOUT` defaults to `120` seconds. This is the maximum time the tool
@@ -63,34 +76,44 @@ documentation in Splunk while the CLI only passes runtime arguments.
 ## Structured YAML search config
 
 Plain SPL files remain supported. Use `-config` when a search needs reusable
-settings beyond the SPL text, such as app context, output file, dispatch
-parameters, result parameters, or search log diagnostics.
+settings beyond the SPL text, such as app context, output file, execution mode,
+dispatch parameters, result parameters, or search log diagnostics.
 
 ```bash
-./splunkquery-darwin -config search.yml
+querysplunk -config search.yml
 ```
+
+### Generate a YAML skeleton
+
+Use `-write-config` to create a starter YAML config file. This is the easiest
+way to see the supported YAML shape without copying an example by hand:
+
+```bash
+querysplunk -write-config search.yml
+```
+
+The generated file includes placeholders for app context, output file, search
+text, dispatch parameters, result parameters, execution mode, and diagnostics.
+It does not include secrets.
+
+The command refuses to overwrite an existing file unless you also pass
+`-force`:
+
+```bash
+querysplunk -write-config search.yml -force
+```
+
+### YAML config example
 
 For quick one-off bounds without YAML, use dispatch-level time flags:
 
 ```bash
-./splunkquery-darwin -q query.txt -earliest=-15m -latest=now
+querysplunk -q query.txt -earliest=-15m -latest=now
 ```
 
 If neither the SPL nor dispatch parameters include `earliest` / `latest` time
 bounds, the tool logs a warning. Existing unbounded searches still run, but
 Splunk REST searches can otherwise run over all time.
-
-To generate a starter config:
-
-```bash
-./splunkquery-darwin -write-config search.yml
-```
-
-The command refuses to overwrite an existing file unless `-force` is also set:
-
-```bash
-./splunkquery-darwin -write-config search.yml -force
-```
 
 Example:
 
@@ -129,6 +152,7 @@ CLI flags override config values where both are set:
 
 - `-app` overrides `app`
 - `-o` overrides `output_file`
+- `-earliest` and `-latest` add dispatch time bounds
 
 Supported `results.endpoint` modes:
 
@@ -161,6 +185,12 @@ derives a file name from the result output file, such as
 Example health-check configs are available in `examples/health/`. They include
 read-only `_internal` and Splunk REST health searches with notes about required
 permissions and Splunk Cloud caveats.
+
+Run one with:
+
+```bash
+querysplunk -config examples/health/splunkd-health.yml
+```
 
 ## Search job lifecycle and diagnostics
 
@@ -198,12 +228,14 @@ diagnostics. Large diagnostic output is bounded before being written to logs.
 
 ## Usage
 
-Place the `.env` file next to the executable when using `-e`.
+Run `querysplunk -h` to see the supported flags. Logs are written to standard
+error and result data is written to the output file selected by `-o` or
+`output_file`.
 
 ### help
 
 ```
-./splunkquery-darwin -h
+querysplunk -h
 ```
 
 ```text
@@ -227,7 +259,7 @@ Authentication and connection settings are read from environment variables:
   SPLUNKTIMEOUT
   SPLUNKAPP
 
-Use -e to load those values from a .env file in the working directory.
+Use -e to load those values from .env in the working directory.
 
 Options:
   -app string
@@ -252,12 +284,14 @@ Options:
 ### integration tests
 
 Build-tagged live tests exist for optional Splunk integration verification.
+They require live Splunk credentials and are skipped when the required
+environment variables are not set.
 
 Run:
 
 ```bash
-cd splunk
 go test -v -tags integration ./...
+(cd splunk && go test -v -tags integration ./...)
 ```
 
 Required environment variables for integration runs:
@@ -265,6 +299,11 @@ Required environment variables for integration runs:
 - `SPLUNKBASEURL`
 - either `SPLUNKTOKEN` or both `SPLUNKUSERNAME` and `SPLUNKPASSWORD`
 - optional: `SPLUNKTLSVERIFY`, `SPLUNKTIMEOUT`, `SPLUNKAPP`
+
+The root integration test runs the CLI with
+`examples/health/splunkd-health.yml`. The `splunk` module integration test
+exercises the lower-level Splunk client and uses `SPLUNK_INTEGRATION_QUERY`
+when provided.
 
 ### GitHub Actions integration workflow
 
@@ -294,10 +333,11 @@ Optional environment secrets:
 - `SPLUNK_INTEGRATION_QUERY`
 
 `SPLUNK_INTEGRATION_QUERY` is optional. If it is not set, the integration test
-uses the repository `query.txt`.
+uses the repository `query.txt` for the lower-level Splunk client test. The
+CLI YAML integration test always runs `examples/health/splunkd-health.yml`.
 
-You can also pass integration values through the normal environment path as
-an alternative to repository secrets.
+For local integration runs, pass the same values through the normal environment
+path instead of GitHub environment secrets.
 
 ## Release
 
