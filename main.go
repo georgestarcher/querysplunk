@@ -287,7 +287,7 @@ Authentication and connection settings are read from environment variables:
   SPLUNKTIMEOUT
   SPLUNKAPP
 
-Use -e to load those values from a .env file in the working directory.
+Use -e to load those values from .env in the working directory.
 
 Options:`)
 	flag.PrintDefaults()

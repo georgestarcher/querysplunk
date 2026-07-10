@@ -1,18 +1,23 @@
 # Splunk health check YAML examples
 
-These examples are starter YAML configs for running common read-only Splunk health checks with `querysplunk`.
+These examples are starter YAML configs for common read-only Splunk health
+checks with `querysplunk`.
 
-They are examples, not defaults. Review each search before using it in production, especially in Splunk Cloud where some REST endpoints and internal indexes may be restricted by role or deployment type.
+They are examples, not defaults. Review each search before using it in
+production, especially in Splunk Cloud where some REST endpoints and internal
+indexes may be restricted by role or deployment type.
 
 ## Usage
 
 Run an example with:
 
 ```bash
-./splunkquery-darwin -config examples/health/splunkd-health.yml
+querysplunk -config examples/health/splunkd-health.yml
 ```
 
-Secrets do not belong in these files. Provide `SPLUNKBASEURL`, `SPLUNKTOKEN`, `SPLUNKUSERNAME`, and `SPLUNKPASSWORD` through your environment, `.env`, or GitHub Actions environment secrets.
+Secrets do not belong in these files. Provide `SPLUNKBASEURL`, `SPLUNKTOKEN`,
+`SPLUNKUSERNAME`, and `SPLUNKPASSWORD` through your environment, `.env`, or
+GitHub Actions environment secrets.
 
 ## Examples
 
@@ -30,7 +35,11 @@ Secrets do not belong in these files. Provide `SPLUNKBASEURL`, `SPLUNKTOKEN`, `S
 ## Operational notes
 
 - `_internal` examples use bounded time windows to avoid accidental all-time searches.
-- REST examples use the Splunk `rest` SPL command. Some roles cannot access these endpoints.
-- Splunk Cloud tenants may hide or restrict some server-status and license endpoints.
-- The examples use `mode: job` so normal job polling and optional `search.log` diagnostics remain available.
-- `results.count: 0` requests all returned rows for the search result set. Add a smaller count when you want a page of results.
+- REST examples use the Splunk `rest` SPL command. Some roles cannot access
+  these endpoints.
+- Splunk Cloud tenants may hide or restrict some server-status and license
+  endpoints.
+- The examples use `mode: job` so normal job polling and `search.log`
+  diagnostics remain available.
+- `results.count: 0` requests all returned rows for the search result set. Add
+  a smaller count when you want a page of results.
