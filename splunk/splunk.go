@@ -2,9 +2,11 @@ package splunk
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,10 +20,10 @@ import (
 
 type SplunkConnection struct {
 	Username, Password, BaseURL string
-	Sessionkey                  SessionKey
-	Authtoken                   string
-	TLSverify                   bool
-	Timeout                     int
+	SessionKey                  SessionKey
+	AuthToken                   string
+	TLSVerify                   bool
+	Timeout                     time.Duration
 }
 
 type SessionKey struct {
@@ -91,57 +93,70 @@ type SplunkJobStatus struct {
 	} `xml:"content"`
 }
 
+const (
+	dispatchStateDone      = "DONE"
+	dispatchStateFailed    = "FAILED"
+	dispatchStateCancelled = "CANCELLED"
+	pollInterval           = time.Second
+)
+
 // Web Methods
 
-func httpClient() *http.Client {
+func (conn SplunkConnection) httpClient() *http.Client {
 	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: !conn.TLSVerify},
 	}
-	client := &http.Client{Transport: tr}
+	client := &http.Client{Transport: tr, Timeout: conn.Timeout}
 	return client
 }
 
-func (conn SplunkConnection) httpGet(url string, data *url.Values) (string, error) {
-	return conn.httpCall(url, "GET", data)
+func (conn SplunkConnection) httpGet(ctx context.Context, url string, data *url.Values) (string, error) {
+	return conn.httpCall(ctx, url, http.MethodGet, data)
 }
 
-func (conn SplunkConnection) httpPost(url string, data *url.Values) (string, error) {
-	return conn.httpCall(url, "POST", data)
+func (conn SplunkConnection) httpPost(ctx context.Context, url string, data *url.Values) (string, error) {
+	return conn.httpCall(ctx, url, http.MethodPost, data)
 }
 
-func (conn SplunkConnection) httpCall(url string, method string, data *url.Values) (string, error) {
-	client := httpClient()
+func (conn SplunkConnection) httpCall(ctx context.Context, requestURL string, method string, data *url.Values) (string, error) {
+	client := conn.httpClient()
 
 	var payload io.Reader
 	if data != nil {
 		payload = bytes.NewBufferString(data.Encode())
 	}
 
-	request, err := http.NewRequest(method, url, payload)
-
+	request, err := http.NewRequestWithContext(ctx, method, requestURL, payload)
 	if err != nil {
 		return "", err
+	}
+	if method == http.MethodPost && data != nil {
+		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}
 
 	conn.addAuthHeader(request)
 	response, err := client.Do(request)
-
 	if err != nil {
 		return "", err
 	}
+	defer response.Body.Close()
 
-	body, _ := io.ReadAll(response.Body)
-	response.Body.Close()
+	body, readErr := io.ReadAll(response.Body)
+	if readErr != nil {
+		return "", readErr
+	}
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return "", fmt.Errorf("request failed with status %s: %s", response.Status, strings.TrimSpace(string(body)))
+	}
 	return string(body), nil
 }
 
 func (conn SplunkConnection) addAuthHeader(request *http.Request) {
-
-	// use auth token first if provided. then session key if alreay obtained. login with credentials last resort
-	if conn.Authtoken != "" {
-		request.Header.Add("Authorization", fmt.Sprintf("Bearer %s", conn.Authtoken))
-	} else if conn.Sessionkey.Value != "" {
-		request.Header.Add("Authorization", fmt.Sprintf("Splunk %s", conn.Sessionkey.Value))
+	// use auth token first if provided. then session key if already obtained. login with credentials last
+	if conn.AuthToken != "" {
+		request.Header.Add("Authorization", fmt.Sprintf("Bearer %s", conn.AuthToken))
+	} else if conn.SessionKey.Value != "" {
+		request.Header.Add("Authorization", fmt.Sprintf("Splunk %s", conn.SessionKey.Value))
 	} else {
 		request.SetBasicAuth(conn.Username, conn.Password)
 	}
@@ -149,131 +164,114 @@ func (conn SplunkConnection) addAuthHeader(request *http.Request) {
 
 // Splunk Methods
 
-// Login connects to the Splunk server and retrieves a session key
-func (conn *SplunkConnection) Login() error {
-
-	// exit function if auth token being used no further login action is needed
-	if conn.Authtoken != "" {
+// Login connects to the Splunk server and retrieves a session key.
+func (conn *SplunkConnection) Login(ctx context.Context) error {
+	// exit early if auth token is already configured.
+	if conn.AuthToken != "" {
 		return nil
 	}
+	if conn.Username == "" || conn.Password == "" {
+		return errors.New("SPLUNKUSERNAME and SPLUNKPASSWORD are required when SPLUNKTOKEN is not set")
+	}
+
 	data := make(url.Values)
 	data.Add("username", conn.Username)
 	data.Add("password", conn.Password)
 	data.Add("output_mode", "json")
-	response, err := conn.httpPost(fmt.Sprintf("%s/services/auth/login", conn.BaseURL), &data)
-
+	response, err := conn.httpPost(ctx, fmt.Sprintf("%s/services/auth/login", conn.BaseURL), &data)
 	if err != nil {
 		return err
 	}
-	if strings.Contains(response, "Login failed") {
-		return fmt.Errorf("%s", response)
-	}
-	if strings.Contains(response, "Unauthorized") {
+	if strings.Contains(response, "Login failed") || strings.Contains(response, "Unauthorized") {
 		return fmt.Errorf("%s", response)
 	}
 
-	bytes := []byte(response)
 	var key SessionKey
-	unmarshall_error := json.Unmarshal(bytes, &key)
-	conn.Sessionkey = key
-
-	return unmarshall_error
+	if err := json.Unmarshal([]byte(response), &key); err != nil {
+		return err
+	}
+	if key.Value == "" {
+		return errors.New("could not parse sessionKey from login response")
+	}
+	conn.SessionKey = key
+	return nil
 }
 
-// Return URL string formatted with job sid
-func (conn SplunkConnection) jobUrl(query *SplunkQuery) string {
-
-	url := fmt.Sprintf("%s/services/search/jobs/%s", conn.BaseURL, query.Job.Sid)
-
-	return url
+// Return URL string formatted with job sid.
+func (conn SplunkConnection) jobURL(query *SplunkQuery) string {
+	return fmt.Sprintf("%s/services/search/jobs/%s", conn.BaseURL, query.Job.Sid)
 }
 
-// Check on job status until DONE or timeout reached
-func (conn SplunkConnection) jobStatus(query *SplunkQuery) error {
-
+// Check on job status until terminal state or context deadline.
+func (conn SplunkConnection) jobStatus(ctx context.Context, query *SplunkQuery) error {
 	data := make(url.Values)
 	query.State = "DISPATCHED"
-	var i int
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
 
-	for i < conn.Timeout {
+	for {
+		select {
+		case <-ctx.Done():
+			query.State = "CANCELLED"
+			return ctx.Err()
+		case <-ticker.C:
+		}
 
-		time.Sleep(time.Second * 1)
-		response, err := conn.httpGet(conn.jobUrl(query), &data)
-
+		response, err := conn.httpGet(ctx, conn.jobURL(query), &data)
 		if err != nil {
 			query.State = "ERROR"
 			return err
 		}
 
-		bytes := []byte(response)
 		var jobStatus SplunkJobStatus
-
-		unmarshall_error := xml.Unmarshal(bytes, &jobStatus)
-
-		if unmarshall_error != nil {
+		if err := xml.Unmarshal([]byte(response), &jobStatus); err != nil {
 			query.State = "ERROR"
 			return err
 		}
 
 		for _, v := range jobStatus.Content.Dict.Key {
-			if v.Name == "dispatchState" {
-				query.State = v.Text
-				if v.Text == "DONE" {
-					return err
-				}
+			if v.Name != "dispatchState" {
+				continue
+			}
+			query.State = v.Text
+			switch query.State {
+			case dispatchStateDone:
+				return nil
+			case dispatchStateFailed, dispatchStateCancelled:
+				return fmt.Errorf("splunk job ended in %s state", query.State)
 			}
 		}
-
-		i += 1
 	}
-	query.State = "TIMEOUT"
-	return fmt.Errorf("query exceeds 120s timeout")
-
 }
 
-// Write results bytes to file as unmodified JSON
-// Something else like python etc can be used on the saved API response
+// Write results bytes to file as unmodified JSON.
+// Something else like python etc can be used on the saved API response.
 func (conn SplunkConnection) writeResults(query *SplunkQuery, outputfile string) error {
-
-	f, err := os.Create(outputfile)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	os.WriteFile(outputfile, query.Results, 0644)
-
-	return err
-
+	return os.WriteFile(outputfile, query.Results, 0644)
 }
 
-// Fetch job results
-func (conn SplunkConnection) jobResults(query *SplunkQuery) error {
-
+// Fetch job results.
+func (conn SplunkConnection) jobResults(ctx context.Context, query *SplunkQuery) error {
 	data := make(url.Values)
 	data.Add("output_mode", "json")
 
-	url := fmt.Sprintf("%s/results/", conn.jobUrl(query))
-	response, err := conn.httpGet(url, &data)
-
+	url := fmt.Sprintf("%s/results/", conn.jobURL(query))
+	response, err := conn.httpGet(ctx, url, &data)
 	if err != nil {
 		query.Results = nil
 		return err
 	}
 
 	query.Results = []byte(response)
-
-	return err
-
+	return nil
 }
 
-// Dispatch Splunk Query: Main Entry Method
-func (conn SplunkConnection) DispatchQuery(query *SplunkQuery, outputfile string) error {
-
+// Dispatch Splunk Query: Main Entry Method.
+func (conn SplunkConnection) DispatchQuery(ctx context.Context, query *SplunkQuery, outputfile string) error {
 	data := make(url.Values)
 	data.Add("search", query.Query)
 
-	response, err := conn.httpPost(fmt.Sprintf("%s/services/search/jobs/", conn.BaseURL), &data)
-
+	response, err := conn.httpPost(ctx, fmt.Sprintf("%s/services/search/jobs/", conn.BaseURL), &data)
 	if err != nil {
 		return err
 	}
@@ -281,24 +279,22 @@ func (conn SplunkConnection) DispatchQuery(query *SplunkQuery, outputfile string
 		return fmt.Errorf("%s", response)
 	}
 
-	bytes := []byte(response)
-	unmarshall_error := xml.Unmarshal(bytes, &query.Job)
-
-	if unmarshall_error != nil {
+	if err = xml.Unmarshal([]byte(response), &query.Job); err != nil {
 		return err
 	}
+	if query.Job.Sid == "" {
+		return fmt.Errorf("empty job sid in response")
+	}
 
-	err = conn.jobStatus(query)
-	if err != nil {
+	if err = conn.jobStatus(ctx, query); err != nil {
 		return err
 	}
-
-	if query.State == "DONE" {
-		conn.jobResults(query)
-		if query.Results != nil {
-			conn.writeResults(query, outputfile)
-		}
+	if query.State != dispatchStateDone {
+		return fmt.Errorf("unexpected job terminal state: %s", query.State)
 	}
 
-	return err
+	if err = conn.jobResults(ctx, query); err != nil {
+		return err
+	}
+	return conn.writeResults(query, outputfile)
 }

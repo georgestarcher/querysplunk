@@ -1,5 +1,16 @@
 # This workflow will build a golang project
 # For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-go
+# Integration workflow note:
+# - Normal CI on push/pull_request runs only unit, race, lint, tidy, and vuln checks.
+# - Live Splunk integration tests run only via manual workflow_dispatch with run_integration_tests=true.
+# Required repository secrets for integration:
+#   - SPLUNKBASEURL
+#   - SPLUNKTOKEN
+#   - SPLUNKUSERNAME
+#   - SPLUNKPASSWORD
+#   - SPLUNKTLSVERIFY
+#   - SPLUNKTIMEOUT
+#   - SPLUNK_INTEGRATION_QUERY (optional; defaults to: search index=_internal | head 1)
 
 name: Go
 
@@ -8,21 +19,105 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  workflow_dispatch:
+    inputs:
+      run_integration_tests:
+        description: "Run live Splunk integration tests (requires secrets)"
+        required: false
+        default: false
+        type: boolean
 
 jobs:
 
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Set up Go
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@v5
       with:
-        go-version: '1.21.4'
+        go-version-file: go.work
+        cache: true
+
+    - name: Check gofmt
+      run: |
+        FILES="$(gofmt -l .)"
+        if [ -n "${FILES}" ]; then
+          echo "The following files are not gofmt'd:"
+          echo "${FILES}"
+          exit 1
+        fi
 
     - name: Build
       run: go build -v ./...
 
-    - name: Test
-      run: go test -v ./splunk/...  
+    - name: Test root module
+      run: go test -v ./...
+
+    - name: Test splunk module
+      working-directory: splunk
+      run: go test -v ./...
+
+    - name: Test with race detector (root)
+      run: go test -race -v ./...
+
+    - name: Test splunk module with race detector
+      working-directory: splunk
+      run: go test -race -v ./...
+
+    - name: Vet
+      run: go vet ./...
+
+    - name: Install static check tools
+      run: |
+        go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+        go install golang.org/x/vuln/cmd/govulncheck@latest
+
+    - name: Lint root module
+      run: golangci-lint run ./...
+
+    - name: Lint splunk module
+      working-directory: splunk
+      run: golangci-lint run ./...
+
+    - name: Check root module tidy
+      run: |
+        go mod tidy
+        git diff --exit-code -- go.mod go.sum
+
+    - name: Check splunk module tidy
+      working-directory: splunk
+      run: |
+        go mod tidy
+        git diff --exit-code -- go.mod go.sum
+
+    - name: Vulnerability check (govulncheck)
+      run: govulncheck ./...
+
+    - name: Vulnerability check (splunk module)
+      working-directory: splunk
+      run: govulncheck ./...
+
+  integration:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.run_integration_tests == 'true'
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+          cache: true
+      - name: Test live Splunk integration
+        env:
+          SPLUNKBASEURL: ${{ secrets.SPLUNKBASEURL }}
+          SPLUNKUSERNAME: ${{ secrets.SPLUNKUSERNAME }}
+          SPLUNKPASSWORD: ${{ secrets.SPLUNKPASSWORD }}
+          SPLUNKTOKEN: ${{ secrets.SPLUNKTOKEN }}
+          SPLUNKTLSVERIFY: ${{ secrets.SPLUNKTLSVERIFY }}
+          SPLUNKTIMEOUT: ${{ secrets.SPLUNKTIMEOUT }}
+          SPLUNK_INTEGRATION_QUERY: ${{ secrets.SPLUNK_INTEGRATION_QUERY }}
+        working-directory: splunk
+        run: go test -tags integration ./...

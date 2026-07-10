@@ -1,17 +1,18 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
 	"os"
-	"splunk"
 	"strconv"
-	"sync"
+	"strings"
 	"time"
 
 	// import for the .env file support
 	"github.com/joho/godotenv"
+	"splunk"
 )
 
 // setup more standard logging format
@@ -21,107 +22,112 @@ type logWriter struct {
 func (writer logWriter) Write(bytes []byte) (int, error) {
 	hostname, err := os.Hostname()
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return 0, err
 	}
-	return fmt.Print(time.Now().UTC().Format("2006-01-02T15:04:05.999Z") + " " + hostname + " splunkquery [DEBUG] " + string(bytes))
+
+	message := []byte(time.Now().UTC().Format("2006-01-02T15:04:05.999Z") + " " + hostname + " splunkquery [DEBUG] " + string(bytes))
+	written, err := os.Stdout.Write(message)
+	if err != nil {
+		return written, err
+	}
+
+	// The logger contract expects the original payload length to be reported as written.
+	return len(bytes), nil
+}
+
+func timeoutFromEnv() (time.Duration, error) {
+	value := strings.TrimSpace(os.Getenv("SPLUNKTIMEOUT"))
+	if value == "" {
+		return 120 * time.Second, nil
+	}
+
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed <= 0 {
+		return 0, fmt.Errorf("invalid SPLUNKTIMEOUT value %q; must be a positive integer (seconds)", value)
+	}
+	return time.Duration(parsed) * time.Second, nil
+}
+
+func tlsVerifyFromEnv() (bool, error) {
+	value := strings.TrimSpace(os.Getenv("SPLUNKTLSVERIFY"))
+	if value == "" {
+		return true, nil
+	}
+
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		return true, fmt.Errorf("invalid SPLUNKTLSVERIFY value %q; must be true or false", value)
+	}
+	return parsed, nil
 }
 
 func main() {
+	var queryFile string
+	var outputFile string
+	var useEnvFile bool
 
-	var queryfile string
-	var outputfile string
-	var envfile string
-
-	// get optional flag arguments
 	log.SetFlags(0)
 	log.SetOutput(new(logWriter))
 
-	flag.StringVar(&envfile, "e", "false", "Use .env file")
-	flag.StringVar(&queryfile, "q", "query.txt", "Enter the filename of the Query.")
-	flag.StringVar(&outputfile, "o", "splunkresults.json", "Enter the filename to save results.")
+	flag.BoolVar(&useEnvFile, "e", false, "Use .env file")
+	flag.StringVar(&queryFile, "q", "query.txt", "Enter the filename of the Query")
+	flag.StringVar(&outputFile, "o", "splunkresults.json", "Enter the filename to save results")
 	flag.Parse()
 
-	// use .env file if option chosen
-	useEnvFile, _ := strconv.ParseBool(envfile)
 	if useEnvFile {
-
-		err := godotenv.Load()
-		if err != nil {
-			log.Fatal("Error loading .env file")
+		if err := godotenv.Load(); err != nil {
+			log.Fatal("ERROR: could not load .env file")
 		}
-
 	}
 
-	// read in SPL query to be executed. One query per file
-	fileContent, err := os.ReadFile(queryfile)
+	fileContent, err := os.ReadFile(queryFile)
 	if err != nil {
 		log.Fatal(err)
 	}
 	splunkQueryString := string(fileContent)
 
-	// setup goroutine waitgroup for thread completion
-	var wg sync.WaitGroup
-
-	// read environment variables
 	username := os.Getenv("SPLUNKUSERNAME")
 	password := os.Getenv("SPLUNKPASSWORD")
-	baseurl := os.Getenv("SPLUNKBASEURL")
-	splunktoken := os.Getenv("SPLUNKTOKEN")
+	baseURL := strings.TrimRight(os.Getenv("SPLUNKBASEURL"), "/")
+	splunkToken := os.Getenv("SPLUNKTOKEN")
 
-	// use credentials if auth token not used
-	if username == "" && splunktoken == "" {
-		log.Fatalf("ERROR: Missing Username")
+	if splunkToken == "" && (username == "" || password == "") {
+		log.Fatal("ERROR: missing SPLUNKUSERNAME and/or SPLUNKPASSWORD when SPLUNKTOKEN is not set")
 	}
-	if password == "" && splunktoken == "" {
-		log.Fatalf("ERROR: Missing Password")
-	}
-	if baseurl == "" {
-		log.Fatalf("ERROR: Missing BaseURL")
+	if baseURL == "" {
+		log.Fatal("ERROR: Missing SPLUNKBASEURL")
 	}
 
-	tlsVerify, err := strconv.ParseBool(os.Getenv("SPLUNKTLSVERIFY"))
+	tlsVerify, err := tlsVerifyFromEnv()
 	if err != nil {
-		tlsVerify = false
+		log.Fatal(err)
 	}
 
-	// set max timeout to wait for a query to finish. default to 120 seconds
-	timeout, err := strconv.Atoi(os.Getenv("SPLUNKTIMEOUT"))
+	timeout, err := timeoutFromEnv()
 	if err != nil {
-		timeout = 120
+		log.Fatal(err)
 	}
 
-	// setup splunk connection structure
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
 	conn := splunk.SplunkConnection{
 		Username:  username,
 		Password:  password,
-		Authtoken: splunktoken,
-		BaseURL:   baseurl,
-		TLSverify: tlsVerify,
+		AuthToken: splunkToken,
+		BaseURL:   baseURL,
+		TLSVerify: tlsVerify,
 		Timeout:   timeout,
 	}
 
-	// attempt to login using credentials and obtain a session key
-	err = conn.Login()
-	if err != nil {
-		log.Fatalf("ERROR: Couldn't login to splunk: %s", err)
+	if err = conn.Login(ctx); err != nil {
+		log.Fatalf("ERROR: Couldn't login to Splunk: %s", err)
 	}
 
-	//setup the query structure and dispatch the job
 	splunkQuery := splunk.SplunkQuery{Query: splunkQueryString}
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		err = conn.DispatchQuery(&splunkQuery, outputfile)
-	}()
-
-	wg.Wait()
-
-	if err != nil {
+	if err = conn.DispatchQuery(ctx, &splunkQuery, outputFile); err != nil {
 		log.Fatalf("ERROR: %s", err)
-	} else {
-		log.Print("SUCCESS: Query Completed")
 	}
 
+	log.Print("SUCCESS: Query Completed")
 }

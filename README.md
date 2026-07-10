@@ -1,11 +1,22 @@
 # splunkquery
 
-## Dependancies
+## Requirements
+Go 1.26+ is required.
+
+## Dependencies
 If you build from source you will need package(s)
 * https://github.com/joho/godotenv
 
+## Quick setup
+
+```bash
+brew install go
+# or upgrade if already installed
+brew upgrade go
+```
+
 ## .env File:
-You may use a .env file if you use the `-e true` option. Otherwise it will default from attempting to load the following from OS Environment Variables.
+You may use a .env file with the `-e` flag. Otherwise the tool reads the following from OS Environment Variables.
 
 ```
 SPLUNKUSERNAME=
@@ -17,7 +28,7 @@ SPLUNKTLSVERIFY=true
 ```
 
 * You can use credentials or a Splunk Authentication token. If you use SPLUNKTOKEN it will ignore the credentials or lack of them.
-* You can set SPLUNKTLSVERIFY to false to avoid validating a Splunk TLS Certificate. If the value fails to convert to boolean type properly it will default to false.
+* You can set SPLUNKTLSVERIFY to false to avoid validating a Splunk TLS Certificate. If not set, TLS verification defaults to true.
 * SPLUNKTIMEOUT will default to 120 seconds if not specified. This is the max time the program will keep checking for the dispatched query to reach a DONE state.
 
 ## query.txt File:
@@ -38,12 +49,58 @@ savedsearch "SOAR - Auth Model - Investigation" user=bob
 ### help
 ```
 ./splunkquery-darwin -h
-``
+```
 
 Usage of ./splunkquery-darwin:
-  -e string
-        Use .env file (default "false")
+  -e
+        Use .env file
   -o string
         Enter the filename to save results. (default "splunkresults.json")
   -q string
         Enter the filename of the Query. (default "query.txt")
+
+### integration tests
+
+Build-tagged live tests exist for optional Splunk integration verification.
+
+Run:
+
+```bash
+cd splunk
+go test -tags integration ./...
+```
+
+Required environment variables for integration runs:
+
+- `SPLUNKBASEURL`
+- either `SPLUNKTOKEN` or both `SPLUNKUSERNAME` and `SPLUNKPASSWORD`
+- optional: `SPLUNKTLSVERIFY`, `SPLUNKTIMEOUT`
+
+### GitHub Actions integration workflow
+
+Repository CI runs unit tests and linting on `push` and `pull_request`.
+Live Splunk integration tests are gated to manual runs only.
+
+To run integration tests in GitHub Actions:
+
+1. Go to `Actions` → `Go`
+2. Click `Run workflow`
+3. Enable **`run_integration_tests`**
+4. Start the run
+
+Create these secrets in your repository for the integration step:
+
+- `SPLUNKBASEURL`
+- `SPLUNKTOKEN`
+- `SPLUNKUSERNAME`
+- `SPLUNKPASSWORD`
+- `SPLUNKTLSVERIFY`
+- `SPLUNKTIMEOUT`
+- `SPLUNK_INTEGRATION_QUERY`
+
+`SPLUNK_INTEGRATION_QUERY` is optional; the default query is:
+
+`search index=_internal | head 1`
+
+You can also pass integration values through the normal environment path as
+an alternative to repository secrets.
