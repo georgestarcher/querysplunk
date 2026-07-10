@@ -33,10 +33,12 @@ SPLUNKAPP=
 * SPLUNKTIMEOUT will default to 120 seconds if not specified. This is the max time the program will keep checking for the dispatched query to reach a DONE state.
 * Use `SPLUNKAPP` (or `-app`) to scope the search to a Splunk app namespace.
 
-## query.txt File:
+## SPL query file
 
-Place one simple SPL query in the file.
-It is recommended to make your SPL Query in Splunk as a saved search. Then make your query file contents like the following.
+The tool reads the SPL search from a file. By default it reads `query.txt`.
+Use `-q` to provide a different file, such as `investigation.spl`.
+
+It is recommended to make your SPL search in Splunk as a saved search. Then make your query file contents like the following.
 
 Bonus that this method of calling a savedsearch works great from SOAR products or SplunkES correlation search drill down fields. I recommend putting such Investigation searches into a SplunkES story as a supporting search. This lets you keep SPL complexity in Splunk as well as document the search there.
 
@@ -57,11 +59,11 @@ Usage of ./splunkquery-darwin:
   -e
         Use .env file
   -o string
-        Enter the filename to save results. (default "splunkresults.json")
+        Write Splunk results to this JSON file. (default "splunkresults.json")
   -app string
         Splunk app context (namespace) for query execution
   -q string
-        Enter the filename of the Query. (default "query.txt")
+        Read the SPL search from this file. (default "query.txt")
 
 ### integration tests
 

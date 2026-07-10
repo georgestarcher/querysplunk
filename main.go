@@ -72,8 +72,8 @@ func main() {
 
 	flag.BoolVar(&useEnvFile, "e", false, "Use .env file")
 	flag.StringVar(&appContext, "app", "", "Splunk app context (namespace) for query execution")
-	flag.StringVar(&queryFile, "q", "query.txt", "Enter the filename of the Query")
-	flag.StringVar(&outputFile, "o", "splunkresults.json", "Enter the filename to save results")
+	flag.StringVar(&queryFile, "q", "query.txt", "Read the SPL search from this file")
+	flag.StringVar(&outputFile, "o", "splunkresults.json", "Write Splunk results to this JSON file")
 	flag.Parse()
 
 	if useEnvFile {
