@@ -94,6 +94,7 @@ dispatch:
     - sourcetype
 
 results:
+  endpoint: auto
   output_mode: json
   count: 0
   offset: 0
@@ -148,6 +149,7 @@ type resultsConfig struct {
 	OutputMode string `yaml:"output_mode"`
 	Count      *int   `yaml:"count"`
 	Offset     *int   `yaml:"offset"`
+	Endpoint   string `yaml:"endpoint"`
 }
 
 type diagnosticsConfig struct {
@@ -174,6 +176,14 @@ func loadSearchConfig(path string) (searchConfig, error) {
 		case splunk.SearchLogModeOff, splunk.SearchLogModeSummary, splunk.SearchLogModeSave, splunk.SearchLogModeBoth:
 		default:
 			return searchConfig{}, fmt.Errorf("invalid diagnostics.search_log value %q; must be one of off, summary, save, both", mode)
+		}
+	}
+	endpoint := strings.TrimSpace(config.Results.Endpoint)
+	if endpoint != "" {
+		switch splunk.ResultEndpointMode(endpoint) {
+		case splunk.ResultEndpointAuto, splunk.ResultEndpointV1, splunk.ResultEndpointV2:
+		default:
+			return searchConfig{}, fmt.Errorf("invalid results.endpoint value %q; must be one of auto, v1, v2", endpoint)
 		}
 	}
 	return config, nil
@@ -389,6 +399,9 @@ func main() {
 	if configFile != "" {
 		options.DispatchParams = dispatchParams(config.Dispatch)
 		options.ResultParams = resultParams(config.Results)
+		if strings.TrimSpace(config.Results.Endpoint) != "" {
+			options.ResultEndpointMode = splunk.ResultEndpointMode(strings.TrimSpace(config.Results.Endpoint))
+		}
 		if strings.TrimSpace(config.Diagnostics.SearchLog) != "" {
 			options.SearchLogMode = splunk.SearchLogMode(strings.TrimSpace(config.Diagnostics.SearchLog))
 		}

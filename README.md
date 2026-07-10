@@ -110,6 +110,7 @@ dispatch:
     - sourcetype
 
 results:
+  endpoint: auto
   output_mode: json
   count: 0
   offset: 0
@@ -127,6 +128,16 @@ CLI flags override config values where both are set:
 
 - `-app` overrides `app`
 - `-o` overrides `output_file`
+
+Supported `results.endpoint` modes:
+
+- `auto`: try the Splunk Search API v2 results endpoint, then fall back to v1
+- `v2`: use `/services/search/v2/jobs/{sid}/results`
+- `v1`: use `/services/search/jobs/{sid}/results/`
+
+Use `results.count` and `results.offset` to request a specific result page.
+The tool writes the response body returned by Splunk without merging multiple
+pages.
 
 Supported `diagnostics.search_log` modes:
 

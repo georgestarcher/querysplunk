@@ -63,6 +63,17 @@ type JobLogDiagnostics struct {
 	Errors            []string
 }
 
+type HTTPStatusError struct {
+	StatusCode int
+	Status     string
+	URL        string
+	Body       string
+}
+
+func (err *HTTPStatusError) Error() string {
+	return fmt.Sprintf("request failed with status %s for %s: %s", err.Status, err.URL, err.Body)
+}
+
 type SearchLogMode string
 
 const (
@@ -72,12 +83,21 @@ const (
 	SearchLogModeBoth    SearchLogMode = "both"
 )
 
+type ResultEndpointMode string
+
+const (
+	ResultEndpointAuto ResultEndpointMode = "auto"
+	ResultEndpointV1   ResultEndpointMode = "v1"
+	ResultEndpointV2   ResultEndpointMode = "v2"
+)
+
 type DispatchOptions struct {
-	OutputFile     string
-	DispatchParams map[string][]string
-	ResultParams   map[string][]string
-	SearchLogMode  SearchLogMode
-	SearchLogFile  string
+	OutputFile         string
+	DispatchParams     map[string][]string
+	ResultParams       map[string][]string
+	ResultEndpointMode ResultEndpointMode
+	SearchLogMode      SearchLogMode
+	SearchLogFile      string
 }
 
 const (
@@ -165,7 +185,12 @@ func (conn SplunkConnection) httpCall(ctx context.Context, requestURL string, me
 		return "", readErr
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return "", fmt.Errorf("request failed with status %s for %s: %s", response.Status, safeURLForLog(requestURL), responseBodyForError(body))
+		return "", &HTTPStatusError{
+			StatusCode: response.StatusCode,
+			Status:     response.Status,
+			URL:        safeURLForLog(requestURL),
+			Body:       responseBodyForError(body),
+		}
 	}
 	return string(body), nil
 }
@@ -397,14 +422,18 @@ func (conn SplunkConnection) cancelJob(query *SplunkQuery) error {
 
 func DefaultDispatchOptions(outputFile string) DispatchOptions {
 	return DispatchOptions{
-		OutputFile:    outputFile,
-		SearchLogMode: SearchLogModeSummary,
+		OutputFile:         outputFile,
+		ResultEndpointMode: ResultEndpointAuto,
+		SearchLogMode:      SearchLogModeSummary,
 	}
 }
 
 func (options DispatchOptions) normalized() DispatchOptions {
 	if options.SearchLogMode == "" {
 		options.SearchLogMode = SearchLogModeSummary
+	}
+	if options.ResultEndpointMode == "" {
+		options.ResultEndpointMode = ResultEndpointAuto
 	}
 	return options
 }
@@ -431,17 +460,46 @@ func (conn SplunkConnection) writeResults(query *SplunkQuery, outputfile string)
 	return os.WriteFile(outputfile, query.Results, 0644)
 }
 
+func canFallbackResultEndpoint(err error) bool {
+	var statusErr *HTTPStatusError
+	if !errors.As(err, &statusErr) {
+		return false
+	}
+	return statusErr.StatusCode == http.StatusNotFound || statusErr.StatusCode == http.StatusMethodNotAllowed || statusErr.StatusCode == http.StatusBadRequest
+}
+
+func (conn SplunkConnection) jobResultsURL(query *SplunkQuery, mode ResultEndpointMode) string {
+	if mode == ResultEndpointV2 {
+		return fmt.Sprintf("%s/services/search/v2/jobs/%s/results", conn.BaseURL, query.Job.Sid)
+	}
+	return fmt.Sprintf("%s/results/", conn.jobURL(query))
+}
+
 // Fetch job results.
-func (conn SplunkConnection) jobResults(ctx context.Context, query *SplunkQuery, resultParams map[string][]string) error {
+func (conn SplunkConnection) jobResults(ctx context.Context, query *SplunkQuery, options DispatchOptions) error {
 	data := make(url.Values)
 	data = conn.namespaceValues(data)
-	data = addParams(data, resultParams)
+	data = addParams(data, options.ResultParams)
 	if data.Get("output_mode") == "" {
 		data.Add("output_mode", "json")
 	}
 
-	url := fmt.Sprintf("%s/results/", conn.jobURL(query))
-	response, err := conn.httpGet(ctx, url, &data)
+	mode := options.ResultEndpointMode
+	if mode == ResultEndpointAuto {
+		response, err := conn.httpGet(ctx, conn.jobResultsURL(query, ResultEndpointV2), &data)
+		if err == nil {
+			query.Results = []byte(response)
+			return nil
+		}
+		if !canFallbackResultEndpoint(err) {
+			query.Results = nil
+			return err
+		}
+		log.Printf("INFO: Splunk search v2 results endpoint unavailable for job %s; falling back to v1 results endpoint", query.Job.Sid)
+		mode = ResultEndpointV1
+	}
+
+	response, err := conn.httpGet(ctx, conn.jobResultsURL(query, mode), &data)
 	if err != nil {
 		query.Results = nil
 		return err
@@ -608,7 +666,7 @@ func (conn SplunkConnection) DispatchQueryWithOptions(ctx context.Context, query
 	}
 	conn.collectJobLogDiagnostics(ctx, query, options)
 
-	if err = conn.jobResults(ctx, query, options.ResultParams); err != nil {
+	if err = conn.jobResults(ctx, query, options); err != nil {
 		return err
 	}
 	return conn.writeResults(query, options.OutputFile)
