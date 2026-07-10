@@ -81,6 +81,7 @@ func readSearchFile(path string) (string, error) {
 
 const skeletonSearchConfig = `app: search
 output_file: splunkresults.json
+mode: job
 search: |
   search index=_internal earliest=-15m
   | head 1
@@ -131,6 +132,7 @@ func writeSkeletonConfig(path string, force bool) error {
 type searchConfig struct {
 	App         string            `yaml:"app"`
 	OutputFile  string            `yaml:"output_file"`
+	Mode        string            `yaml:"mode"`
 	Search      string            `yaml:"search"`
 	Dispatch    dispatchConfig    `yaml:"dispatch"`
 	Results     resultsConfig     `yaml:"results"`
@@ -169,6 +171,14 @@ func loadSearchConfig(path string) (searchConfig, error) {
 	}
 	if strings.TrimSpace(config.Search) == "" {
 		return searchConfig{}, fmt.Errorf("search config %q is missing search content", path)
+	}
+	executionMode := strings.TrimSpace(config.Mode)
+	if executionMode != "" {
+		switch splunk.ExecutionMode(executionMode) {
+		case splunk.ExecutionModeJob, splunk.ExecutionModeExport:
+		default:
+			return searchConfig{}, fmt.Errorf("invalid mode value %q; must be one of job, export", executionMode)
+		}
 	}
 	mode := strings.TrimSpace(config.Diagnostics.SearchLog)
 	if mode != "" {
@@ -401,6 +411,9 @@ func main() {
 		options.ResultParams = resultParams(config.Results)
 		if strings.TrimSpace(config.Results.Endpoint) != "" {
 			options.ResultEndpointMode = splunk.ResultEndpointMode(strings.TrimSpace(config.Results.Endpoint))
+		}
+		if strings.TrimSpace(config.Mode) != "" {
+			options.ExecutionMode = splunk.ExecutionMode(strings.TrimSpace(config.Mode))
 		}
 		if strings.TrimSpace(config.Diagnostics.SearchLog) != "" {
 			options.SearchLogMode = splunk.SearchLogMode(strings.TrimSpace(config.Diagnostics.SearchLog))
