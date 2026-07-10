@@ -18,7 +18,8 @@ copy_bundle_files() {
   local package_dir="$1"
   cp README.md "${package_dir}/README.md"
   mkdir -p "${package_dir}/examples" "${package_dir}/.agents/skills"
-  cp -R examples/health "${package_dir}/examples/health"
+  mkdir -p "${package_dir}/examples/health"
+  find examples/health -maxdepth 1 -type f \( -name '*.md' -o -name '*.yml' \) -exec cp {} "${package_dir}/examples/health/" \;
   cp -R .agents/skills/querysplunk "${package_dir}/.agents/skills/querysplunk"
 }
 

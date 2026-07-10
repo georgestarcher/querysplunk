@@ -71,7 +71,14 @@ If using a normal `.env` file in the working directory, run:
 querysplunk -e -config search.yml
 ```
 
-Some 1Password local environment files are mounted as named pipes. If `querysplunk -e` cannot load that file directly, source it in the shell and then run querysplunk without `-e`:
+Some 1Password local environment files are mounted as named pipes. If
+`querysplunk -e` cannot load that file directly, do not source an arbitrary
+repo-local env file. Sourcing executes shell code, so only use this fallback
+when the path was just created or verified through the trusted 1Password
+environment tooling. Otherwise, ask the user to export the variables in their
+shell or provide a normal `.env` file.
+
+Trusted 1Password named-pipe fallback:
 
 ```bash
 set -a

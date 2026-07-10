@@ -13,6 +13,11 @@ required_common=(
   ".agents/skills/querysplunk/references/release.md"
 )
 
+example_output_files=()
+while IFS= read -r output_file; do
+  example_output_files+=("${output_file}")
+done < <(awk -F: '/^[[:space:]]*output_file:/ {gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); gsub(/^"|"$/, "", $2); print $2}' examples/health/*.yml)
+
 fail() {
   echo "ERROR: $*" >&2
   exit 1
@@ -25,6 +30,16 @@ check_forbidden_names() {
     echo "${listing}" >&2
     fail "${archive} contains local env or generated result artifacts"
   fi
+  if grep -Eq '^[^/]+/examples/health/.*\.json$' <<<"${listing}"; then
+    echo "${listing}" >&2
+    fail "${archive} contains generated JSON under examples/health"
+  fi
+  for output_file in "${example_output_files[@]}"; do
+    if grep -Fq "/${output_file}" <<<"${listing}"; then
+      echo "${listing}" >&2
+      fail "${archive} contains generated example output ${output_file}"
+    fi
+  done
 }
 
 check_listing() {
