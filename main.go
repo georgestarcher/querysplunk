@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -20,6 +21,8 @@ import (
 // setup more standard logging format
 type logWriter struct {
 }
+
+var splTimeModifierPattern = regexp.MustCompile(`(?i)(^|\s)(earliest|latest)\s*=`)
 
 func (writer logWriter) Write(bytes []byte) (int, error) {
 	hostname, err := os.Hostname()
@@ -209,6 +212,31 @@ func dispatchParams(config dispatchConfig) map[string][]string {
 	return params
 }
 
+func setStringParam(params map[string][]string, key string, value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fmt.Errorf("%s cannot be empty", key)
+	}
+	params[key] = []string{value}
+	return nil
+}
+
+func hasParamValue(params map[string][]string, key string) bool {
+	for _, value := range params[key] {
+		if strings.TrimSpace(value) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func hasSearchTimeBounds(search string, dispatchParams map[string][]string) bool {
+	if hasParamValue(dispatchParams, "earliest_time") || hasParamValue(dispatchParams, "latest_time") {
+		return true
+	}
+	return splTimeModifierPattern.MatchString(search)
+}
+
 func resultParams(config resultsConfig) map[string][]string {
 	params := make(map[string][]string)
 	addStringParam(params, "output_mode", config.OutputMode)
@@ -226,6 +254,7 @@ Run a Splunk search from a plain SPL file or from a structured YAML config.
 
 Examples:
   querysplunk -q query.txt -o splunkresults.json
+  querysplunk -q query.txt -earliest=-15m -latest=now
   querysplunk -config search.yml
   querysplunk -write-config search.yml
   querysplunk -write-config search.yml -force
@@ -252,6 +281,8 @@ func main() {
 	var configFile string
 	var writeConfigFile string
 	var forceWrite bool
+	var earliestTime string
+	var latestTime string
 
 	log.SetFlags(0)
 	log.SetOutput(new(logWriter))
@@ -261,6 +292,8 @@ func main() {
 	flag.StringVar(&appContext, "app", "", "Override Splunk app context / namespace for the search")
 	flag.StringVar(&configFile, "config", "", "Run a structured YAML search config")
 	flag.StringVar(&writeConfigFile, "write-config", "", "Write a starter YAML search config and exit")
+	flag.StringVar(&earliestTime, "earliest", "", "Set dispatch earliest_time, such as -15m or 2026-07-10T00:00:00")
+	flag.StringVar(&latestTime, "latest", "", "Set dispatch latest_time, such as now")
 	flag.BoolVar(&forceWrite, "force", false, "Allow -write-config to overwrite an existing file")
 	flag.StringVar(&queryFile, "q", "query.txt", "Read the SPL search from this plain text file")
 	flag.StringVar(&outputFile, "o", "splunkresults.json", "Write Splunk results to this file")
@@ -360,6 +393,22 @@ func main() {
 			options.SearchLogMode = splunk.SearchLogMode(strings.TrimSpace(config.Diagnostics.SearchLog))
 		}
 		options.SearchLogFile = strings.TrimSpace(config.Diagnostics.SearchLogFile)
+	}
+	if options.DispatchParams == nil {
+		options.DispatchParams = make(map[string][]string)
+	}
+	if flagsSet["earliest"] {
+		if err := setStringParam(options.DispatchParams, "earliest_time", earliestTime); err != nil {
+			log.Fatal(err)
+		}
+	}
+	if flagsSet["latest"] {
+		if err := setStringParam(options.DispatchParams, "latest_time", latestTime); err != nil {
+			log.Fatal(err)
+		}
+	}
+	if !hasSearchTimeBounds(splunkQueryString, options.DispatchParams) {
+		log.Print("WARN: no SPL earliest/latest modifier or dispatch earliest_time/latest_time was provided; Splunk REST searches can run over all time")
 	}
 	if err = conn.DispatchQueryWithOptions(ctx, &splunkQuery, options); err != nil {
 		log.Fatalf("ERROR: %s", err)

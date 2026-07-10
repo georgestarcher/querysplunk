@@ -305,3 +305,42 @@ func TestConfigParams(t *testing.T) {
 		t.Fatalf("expected offset 10, got %q", got)
 	}
 }
+
+func TestSetStringParam(t *testing.T) {
+	params := map[string][]string{"earliest_time": {"-24h"}}
+	if err := setStringParam(params, "earliest_time", " -15m "); err != nil {
+		t.Fatalf("set string param: %v", err)
+	}
+	if got := params["earliest_time"]; len(got) != 1 || got[0] != "-15m" {
+		t.Fatalf("expected override to single trimmed value, got %#v", got)
+	}
+
+	if err := setStringParam(params, "latest_time", " "); err == nil {
+		t.Fatal("expected empty value error")
+	}
+}
+
+func TestHasSearchTimeBounds(t *testing.T) {
+	cases := []struct {
+		name     string
+		search   string
+		dispatch map[string][]string
+		want     bool
+	}{
+		{name: "spl earliest", search: "search index=_internal earliest=-15m | head 1", want: true},
+		{name: "spl latest", search: "search index=_internal latest=now | head 1", want: true},
+		{name: "dispatch earliest", search: "search index=_internal | head 1", dispatch: map[string][]string{"earliest_time": {"-15m"}}, want: true},
+		{name: "dispatch latest", search: "search index=_internal | head 1", dispatch: map[string][]string{"latest_time": {"now"}}, want: true},
+		{name: "unbounded", search: "search index=_internal | head 1", dispatch: map[string][]string{}, want: false},
+		{name: "empty dispatch value", search: "search index=_internal | head 1", dispatch: map[string][]string{"earliest_time": {" "}}, want: false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := hasSearchTimeBounds(tc.search, tc.dispatch)
+			if got != tc.want {
+				t.Fatalf("expected %v, got %v", tc.want, got)
+			}
+		})
+	}
+}
