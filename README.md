@@ -36,6 +36,8 @@ Prepared queries provide buffered `Search`, streaming `SearchTo`, and atomic
 through `query.Finding`; `errors.Is` and `errors.As` work with
 `query.ErrSafetyViolation` and `*query.ViolationError`. Credentials remain the
 responsibility of `splunk.NewClient` and never belong in YAML.
+Prepared job searches default to summarized, bounded `search.log` diagnostics;
+set `diagnostics.search_log: off` explicitly to disable retrieval.
 
 Bundled health files can be loaded with
 `query.LoadFS(os.DirFS("."), "examples/health/splunkd-health.yml")` or embedded

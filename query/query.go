@@ -476,7 +476,7 @@ func defaults(config Config) Config {
 		config.Results.Endpoint = string(splunk.ResultEndpointAuto)
 	}
 	if strings.TrimSpace(config.Diagnostics.SearchLog) == "" {
-		config.Diagnostics.SearchLog = string(splunk.SearchLogModeOff)
+		config.Diagnostics.SearchLog = string(splunk.SearchLogModeSummary)
 	}
 	return config
 }

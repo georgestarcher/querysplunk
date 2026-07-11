@@ -100,6 +100,9 @@ func TestPrepareMergePrecedenceAndCopies(t *testing.T) {
 	if got.App != app || got.OutputFile != output || got.Dispatch.EarliestTime != earliest || got.Dispatch.LatestTime != latest || got.Dispatch.RequiredFields[0] != "host" {
 		t.Fatalf("unexpected merged copy: %#v", got)
 	}
+	if options := prepared.Options(); options.SearchLog != splunk.SearchLogModeSummary {
+		t.Fatalf("default search.log mode = %q; want summary", options.SearchLog)
+	}
 }
 
 func TestSafetyFindingsAndAcknowledgements(t *testing.T) {
