@@ -5,7 +5,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -102,26 +101,24 @@ func runSearchToFile(ctx context.Context, client *splunk.Client, search string, 
 		_ = temporary.Close()
 		return result, err
 	}
-	if _, err := temporary.Seek(0, io.SeekStart); err != nil {
-		_ = temporary.Close()
+	if err := temporary.Close(); err != nil {
 		return result, err
 	}
+	if err := os.Rename(temporaryPath, outputFile); err != nil {
+		return result, err
+	}
+	return result, nil
+}
 
-	output, err := os.Create(outputFile)
-	if err != nil {
-		_ = temporary.Close()
-		return result, err
+func derivedSearchLogFile(outputFile string) string {
+	if strings.TrimSpace(outputFile) == "" {
+		return "splunk.search.log"
 	}
-	_, copyErr := io.Copy(output, temporary)
-	closeOutputErr := output.Close()
-	closeTemporaryErr := temporary.Close()
-	if copyErr != nil {
-		return result, copyErr
+	ext := filepath.Ext(outputFile)
+	if ext == "" {
+		return outputFile + ".search.log"
 	}
-	if closeOutputErr != nil {
-		return result, closeOutputErr
-	}
-	return result, closeTemporaryErr
+	return strings.TrimSuffix(outputFile, ext) + ".search.log"
 }
 
 const skeletonSearchConfig = `app: search
@@ -578,6 +575,9 @@ func main() {
 			options.SearchLog = splunk.SearchLogMode(strings.TrimSpace(config.Diagnostics.SearchLog))
 		}
 		options.SearchLogFile = strings.TrimSpace(config.Diagnostics.SearchLogFile)
+	}
+	if (options.SearchLog == splunk.SearchLogModeSave || options.SearchLog == splunk.SearchLogModeBoth) && options.SearchLogFile == "" {
+		options.SearchLogFile = derivedSearchLogFile(outputFile)
 	}
 	if options.DispatchParams == nil {
 		options.DispatchParams = make(map[string][]string)
