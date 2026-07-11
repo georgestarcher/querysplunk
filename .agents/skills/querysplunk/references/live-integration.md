@@ -18,6 +18,10 @@ Run only the lower-level Splunk client integration:
 go test -v -tags integration ./splunk
 ```
 
+The root live test exercises YAML through the public `query` package. Synthetic
+tests under `./query` cover strict loading, safety findings, streaming,
+cancellation, diagnostics, and atomic output replacement.
+
 The root integration test runs `examples/health/splunkd-health.yml`. The splunk package integration test uses `SPLUNK_INTEGRATION_QUERY` when set, otherwise it falls back to `query.txt`.
 
 In GitHub Actions, live Splunk integration is manual: run the `Go` workflow with `run_integration_tests=true`. The workflow expects secrets in the `AUTH_TOKEN` environment.

@@ -19,6 +19,14 @@ Important fields:
 
 Secrets never belong in YAML. Use environment variables or a local `.env` mechanism for credentials.
 
+The public Go package `github.com/georgestarcher/querysplunk/v2/query` owns this
+schema. Its loading APIs strictly reject unknown fields, duplicate keys,
+malformed or multiple YAML documents, missing search text, invalid modes, and
+incompatible diagnostics. Use `query.Prepare` after `query.Overrides`; its
+zero-value safety policy matches the CLI. Typed findings distinguish warnings,
+blocking violations, and acknowledgements. `query.UnsafeAllowAll()` deliberately
+disables blocking protections and is unsafe for untrusted searches.
+
 For `mode: job`, querysplunk creates a Splunk search job, polls for completion, can fetch `search.log`, and then fetches results.
 
 For `mode: export`, querysplunk streams results directly from Splunk export. This can be useful for large exports, but there is no search job ID and no `search.log` diagnostic fetch.

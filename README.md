@@ -17,7 +17,31 @@ If you build from source, Go resolves these dependencies automatically:
 
 ## Use as a Go package
 
-Applications can import the reusable client directly:
+Applications can load and safely prepare the same YAML used by the CLI:
+
+```go
+import "github.com/georgestarcher/querysplunk/v2/query"
+```
+
+Use `query.Load`, `query.LoadFile`, or `query.LoadFS` for strict YAML decoding.
+`query.Prepare` applies caller overrides, defaults, typed safety analysis, and
+conversion to `splunk.SearchOptions` in that order. The zero-value
+`query.SafetyPolicy` blocks earliest values older than one calendar year and
+explicit `index=*`. Prefer per-risk acknowledgements in YAML or
+`query.Overrides`; `query.UnsafeAllowAll()` is an intentionally conspicuous
+escape hatch and must not be used for untrusted searches.
+
+Prepared queries provide buffered `Search`, streaming `SearchTo`, and atomic
+`SearchToFile` execution. Inspect warnings, violations, and acknowledgements
+through `query.Finding`; `errors.Is` and `errors.As` work with
+`query.ErrSafetyViolation` and `*query.ViolationError`. Credentials remain the
+responsibility of `splunk.NewClient` and never belong in YAML.
+
+Bundled health files can be loaded with
+`query.LoadFS(os.DirFS("."), "examples/health/splunkd-health.yml")` or embedded
+in another application with `embed.FS`.
+
+Applications can also import the lower-level REST client directly:
 
 ```go
 import "github.com/georgestarcher/querysplunk/v2/splunk"
@@ -87,9 +111,8 @@ Important package boundaries and limits:
   logger's level filter to suppress informational progress while retaining
   warnings. Package logs exclude credentials, SPL, URLs, result data, complete
   search logs, and individual diagnostic lines.
-- The package executes SPL; it does not parse the CLI YAML format or enforce the
-  CLI's one-year and `index=*` safety policy. Applications must validate and
-  bound user-provided SPL before calling it.
+- The low-level `splunk` package executes SPL without policy. Use the `query`
+  package when consumers should share the CLI YAML schema and safety controls.
 - TLS verification is on by default. `InsecureSkipVerify` is an explicit escape
   hatch for controlled development systems, not a production default.
 - `Search` buffers result bodies in memory. Use `SearchTo` and a caller-owned
