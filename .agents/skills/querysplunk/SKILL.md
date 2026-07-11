@@ -8,6 +8,12 @@ Use this skill when a user asks a local AI assistant to run, inspect, or prepare
 
 It does not store credentials in YAML. Splunk connection settings must come from environment variables, `.env`, 1Password-backed local environment files, or GitHub Actions environment secrets.
 
+Go and AI-agent applications can use
+`github.com/georgestarcher/querysplunk/v2/query` to load the same YAML, apply
+the same safety policy, and execute through `splunk.Client`. Prefer this package
+over reimplementing YAML or safety checks. Its zero-value policy is safe; never
+use `query.UnsafeAllowAll()` without explicit user authorization.
+
 ## Safe operating rules
 
 - Never print `SPLUNKTOKEN`, `SPLUNKPASSWORD`, bearer tokens, authorization headers, or raw `.env` contents.
@@ -62,6 +68,11 @@ querysplunk -config examples/health/splunkd-health.yml
 6. Read the configured `output_file` and summarize the result count and important fields.
 7. If `diagnostics.search_log` is `summary`, `save`, or `both`, surface warnings and errors reported by querysplunk.
 8. If `mode: export`, do not expect a search job ID or `search.log` diagnostics.
+
+For embedded Go workflows, use `query.LoadFile`, apply explicit
+`query.Overrides`, call `query.Prepare`, inspect typed findings, and then call
+`Prepared.Search`, `Prepared.SearchTo`, or `Prepared.SearchToFile`. Apply every
+override before preparation so post-merge safety analysis cannot be bypassed.
 
 ## Environment notes
 

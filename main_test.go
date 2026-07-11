@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	querypkg "github.com/georgestarcher/querysplunk/v2/query"
 	"github.com/georgestarcher/querysplunk/v2/splunk"
 )
 
@@ -134,7 +135,7 @@ func TestDerivedSearchLogFile(t *testing.T) {
 		"":                   "splunk.search.log",
 	}
 	for input, expected := range tests {
-		if actual := derivedSearchLogFile(input); actual != expected {
+		if actual := querypkg.DerivedSearchLogFile(input); actual != expected {
 			t.Errorf("derivedSearchLogFile(%q) = %q; want %q", input, actual, expected)
 		}
 	}
@@ -180,8 +181,11 @@ func TestRunSearchToFileReplacesOnlyAfterSuccess(t *testing.T) {
 	if err := os.WriteFile(output, []byte("stale"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	options := splunk.SearchOptions{SearchLog: splunk.SearchLogModeOff}
-	if _, err := runSearchToFile(context.Background(), client, "success", options, output); err != nil {
+	prepared, err := querypkg.Prepare(querypkg.Config{Search: "success", OutputFile: output}, querypkg.Overrides{}, querypkg.UnsafeAllowAll())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := prepared.SearchToFile(context.Background(), client); err != nil {
 		t.Fatalf("successful replacement: %v", err)
 	}
 	actual, err := os.ReadFile(output)
@@ -196,7 +200,11 @@ func TestRunSearchToFileReplacesOnlyAfterSuccess(t *testing.T) {
 	if err := os.WriteFile(output, []byte(lastGood), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := runSearchToFile(context.Background(), client, "fail", options, output); err == nil {
+	prepared, err = querypkg.Prepare(querypkg.Config{Search: "fail", OutputFile: output}, querypkg.Overrides{}, querypkg.UnsafeAllowAll())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := prepared.SearchToFile(context.Background(), client); err == nil {
 		t.Fatal("expected dispatch failure")
 	}
 	actual, err = os.ReadFile(output)
@@ -288,7 +296,7 @@ func TestLoadSearchConfig(t *testing.T) {
 	configFile := t.TempDir() + "/search.yml"
 	content := `app: search
 output_file: out.json
-mode: export
+mode: job
 search: |
   search index=_internal earliest=-15m
   | head 1
@@ -325,8 +333,8 @@ diagnostics:
 	if config.OutputFile != "out.json" {
 		t.Fatalf("expected output file, got %q", config.OutputFile)
 	}
-	if config.Mode != "export" {
-		t.Fatalf("expected mode export, got %q", config.Mode)
+	if config.Mode != "job" {
+		t.Fatalf("expected mode job, got %q", config.Mode)
 	}
 	if !strings.Contains(config.Search, "index=_internal") {
 		t.Fatalf("expected search content, got %q", config.Search)
