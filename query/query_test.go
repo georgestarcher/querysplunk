@@ -76,7 +76,12 @@ func TestLoadFSAndHealthFixtures(t *testing.T) {
 		t.Fatalf("health fixtures: %v, %v", matches, err)
 	}
 	for _, path := range matches {
-		relative := filepath.ToSlash(strings.TrimPrefix(path, "../"))
+		relative, err := filepath.Rel("..", path)
+		if err != nil {
+			t.Errorf("make %s relative: %v", path, err)
+			continue
+		}
+		relative = filepath.ToSlash(relative)
 		if _, err := query.LoadFS(os.DirFS(".."), relative); err != nil {
 			t.Errorf("load %s: %v", path, err)
 		}
