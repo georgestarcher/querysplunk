@@ -1,4 +1,4 @@
-module github.com/georgestarcher/querysplunk
+module github.com/georgestarcher/querysplunk/v2
 
 go 1.26
 

@@ -13,7 +13,7 @@ import (
 	"time"
 
 	// import for the .env file support
-	"github.com/georgestarcher/querysplunk/splunk"
+	"github.com/georgestarcher/querysplunk/v2/splunk"
 	"github.com/joho/godotenv"
 	"gopkg.in/yaml.v3"
 )

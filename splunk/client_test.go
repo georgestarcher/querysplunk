@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/georgestarcher/querysplunk/splunk"
+	"github.com/georgestarcher/querysplunk/v2/splunk"
 )
 
 func TestNewClientRejectsInvalidConfiguration(t *testing.T) {

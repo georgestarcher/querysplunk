@@ -20,11 +20,11 @@ If you build from source, Go resolves these dependencies automatically:
 Applications can import the reusable client directly:
 
 ```go
-import "github.com/georgestarcher/querysplunk/splunk"
+import "github.com/georgestarcher/querysplunk/v2/splunk"
 ```
 
-The package is part of this repository's existing Go module and follows its
-release versions. Use `splunk.NewClient` for application code. The older
+The package is part of this repository's v2 Go module and follows its release
+versions. Use `splunk.NewClient` for application code. The older
 `SplunkConnection` and `SplunkQuery` API remains available for compatibility
 with the CLI, but it exposes mutable request state and is not the recommended
 consumer boundary.

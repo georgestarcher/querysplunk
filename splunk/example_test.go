@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/georgestarcher/querysplunk/splunk"
+	"github.com/georgestarcher/querysplunk/v2/splunk"
 )
 
 func ExampleClient() {
