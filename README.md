@@ -35,6 +35,7 @@ client, err := splunk.NewClient(splunk.Config{
     BaseURL: os.Getenv("SPLUNKBASEURL"),
     Token:   os.Getenv("SPLUNKTOKEN"),
     App:     "search",
+    Logger:  slog.New(slog.NewJSONHandler(os.Stderr, nil)),
 })
 if err != nil {
     return err
@@ -80,6 +81,12 @@ authentication. Each returned byte slice belongs to the caller.
 
 Important package boundaries and limits:
 
+- Package logging is disabled by default. Set `Config.Logger` to a
+  concurrency-safe `*slog.Logger` to receive structured job progress,
+  endpoint-fallback, duration, and bounded diagnostic-severity records. Use the
+  logger's level filter to suppress informational progress while retaining
+  warnings. Package logs exclude credentials, SPL, URLs, result data, complete
+  search logs, and individual diagnostic lines.
 - The package executes SPL; it does not parse the CLI YAML format or enforce the
   CLI's one-year and `index=*` safety policy. Applications must validate and
   bound user-provided SPL before calling it.
