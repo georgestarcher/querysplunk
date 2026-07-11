@@ -19,7 +19,7 @@ package:
 	scripts/package-release.sh ${VERSION} ${BINARY_NAME} ${BUILD_DIR}
 
 verify-package:
-	scripts/verify-package-contents.sh ${BUILD_DIR}
+	scripts/verify-package-contents.sh ${BUILD_DIR} ${VERSION}
 
 clean:
 	go clean

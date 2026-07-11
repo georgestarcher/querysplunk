@@ -18,6 +18,15 @@ import (
 	"github.com/joho/godotenv"
 )
 
+var (
+	version = "dev"
+	commit  = "unknown"
+)
+
+func versionString() string {
+	return fmt.Sprintf("querysplunk version=%s commit=%s", version, commit)
+}
+
 // setup more standard logging format
 type logWriter struct {
 }
@@ -152,6 +161,7 @@ func usage() {
 Run a Splunk search from a plain SPL file or from a structured YAML config.
 
 Examples:
+  querysplunk -version
   querysplunk -q query.txt -o splunkresults.json
   querysplunk -q query.txt -earliest=-15m -latest=now
   querysplunk -config search.yml
@@ -188,6 +198,7 @@ func main() {
 	var latestTime string
 	var allowOldEarliest bool
 	var allowIndexWildcard bool
+	var showVersion bool
 
 	log.SetFlags(0)
 	log.SetOutput(new(logWriter))
@@ -201,10 +212,15 @@ func main() {
 	flag.StringVar(&latestTime, "latest", "", "Set dispatch latest_time, such as now")
 	flag.BoolVar(&allowOldEarliest, "allow-old-earliest", false, "Allow earliest times older than the default one-year safety limit")
 	flag.BoolVar(&allowIndexWildcard, "allow-index-wildcard", false, "Allow searches that explicitly use index=*")
+	flag.BoolVar(&showVersion, "version", false, "Print version and build metadata, then exit")
 	flag.BoolVar(&forceWrite, "force", false, "Allow -write-config to overwrite an existing file")
 	flag.StringVar(&queryFile, "q", "query.txt", "Read the SPL search from this plain text file")
 	flag.StringVar(&outputFile, "o", "splunkresults.json", "Write Splunk results to this file")
 	flag.Parse()
+	if showVersion {
+		fmt.Println(versionString())
+		return
+	}
 	flagsSet := explicitFlags()
 
 	if writeConfigFile != "" {

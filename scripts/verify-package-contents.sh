@@ -2,6 +2,7 @@
 set -euo pipefail
 
 dist_dir="${1:-dist}"
+expected_version="${2:-}"
 
 required_common=(
   "README.md"
@@ -57,6 +58,35 @@ check_listing() {
 shopt -s nullglob
 archives=("${dist_dir}"/*.tar.gz "${dist_dir}"/*.zip)
 [ "${#archives[@]}" -gt 0 ] || fail "no release archives found in ${dist_dir}"
+
+if [ -n "${expected_version}" ]; then
+  case "$(uname -s)-$(uname -m)" in
+    Darwin-x86_64) host_archive="${dist_dir}/splunkquery-${expected_version}-darwin-amd64.tar.gz" ;;
+    Darwin-arm64) host_archive="${dist_dir}/splunkquery-${expected_version}-darwin-arm64.tar.gz" ;;
+    Linux-x86_64) host_archive="${dist_dir}/splunkquery-${expected_version}-linux-amd64.tar.gz" ;;
+    Linux-aarch64|Linux-arm64) host_archive="${dist_dir}/splunkquery-${expected_version}-linux-arm64.tar.gz" ;;
+    *) host_archive="" ;;
+  esac
+
+  if [ -n "${host_archive}" ]; then
+    [ -f "${host_archive}" ] || fail "missing host archive ${host_archive}"
+    verify_dir="$(mktemp -d)"
+    trap 'rm -rf "${verify_dir}"' EXIT
+    tar -xzf "${host_archive}" -C "${verify_dir}"
+    host_binary="$(find "${verify_dir}" -type f -name splunkquery -print -quit)"
+    [ -n "${host_binary}" ] || fail "${host_archive} does not contain splunkquery"
+    actual_version="$("${host_binary}" -version)"
+    expected_commit="$(git rev-parse --short=12 HEAD 2>/dev/null || true)"
+    expected_commit="${expected_commit:-unknown}"
+    expected_output="querysplunk version=${expected_version} commit=${expected_commit}"
+    if [ "${actual_version}" != "${expected_output}" ]; then
+      fail "${host_archive} version output was '${actual_version}'; expected '${expected_output}'"
+    fi
+    echo "verified ${host_archive} reports ${actual_version}"
+  else
+    echo "skipped executable version check for unsupported host $(uname -s)-$(uname -m)"
+  fi
+fi
 
 for archive in "${archives[@]}"; do
   case "${archive}" in

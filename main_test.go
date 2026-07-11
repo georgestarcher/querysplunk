@@ -15,6 +15,24 @@ import (
 	"github.com/georgestarcher/querysplunk/v2/splunk"
 )
 
+func TestVersionStringDevelopmentDefaults(t *testing.T) {
+	if got, want := versionString(), "querysplunk version=dev commit=unknown"; got != want {
+		t.Fatalf("versionString() = %q; want %q", got, want)
+	}
+}
+
+func TestVersionStringInjectedValues(t *testing.T) {
+	originalVersion, originalCommit := version, commit
+	version, commit = "v2.1.0", "0123456789ab"
+	t.Cleanup(func() {
+		version, commit = originalVersion, originalCommit
+	})
+
+	if got, want := versionString(), "querysplunk version=v2.1.0 commit=0123456789ab"; got != want {
+		t.Fatalf("versionString() = %q; want %q", got, want)
+	}
+}
+
 func TestTimeoutFromEnv(t *testing.T) {
 	t.Setenv("SPLUNKTIMEOUT", "")
 	val, err := timeoutFromEnv()
