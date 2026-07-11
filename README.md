@@ -435,8 +435,12 @@ when provided.
 
 ### GitHub Actions integration workflow
 
-Repository CI runs unit tests and linting on `push` and `pull_request`.
-Live Splunk integration tests are gated to manual runs only.
+Repository CI builds and runs unit tests on Linux, macOS, and Windows for every
+`push` and `pull_request`. Race tests run on Linux and macOS; Windows runs build
+and unit coverage because race detection is not part of the repository's
+reliable Windows runner contract. Linux also runs formatting, coverage, fuzzing,
+vet, lint, module-tidy, and vulnerability checks. Live Splunk integration tests
+are gated to manual runs only and depend on both CI layers passing.
 
 To run integration tests in GitHub Actions:
 

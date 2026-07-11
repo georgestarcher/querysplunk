@@ -90,9 +90,44 @@ jobs:
     - name: Vulnerability check (govulncheck)
       run: govulncheck ./...
 
+  platform:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-latest
+          - windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.5'
+          check-latest: true
+          cache: true
+
+      - name: Build
+        run: go build ./...
+
+      - name: Test
+        run: go test ./...
+
+      - name: Test with race detector
+        if: runner.os != 'Windows'
+        run: go test -race ./...
+
+      - name: Document Windows race exclusion
+        if: runner.os == 'Windows'
+        run: echo "Windows runs build and unit tests; race detection remains on Linux and macOS where the repository validates it reliably."
+
   integration:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.run_integration_tests == 'true'
-    needs: build
+    needs:
+      - build
+      - platform
     runs-on: ubuntu-latest
     environment: AUTH_TOKEN
     steps:

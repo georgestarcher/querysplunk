@@ -1,12 +1,17 @@
 package main
 
 import (
+	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/georgestarcher/querysplunk/v2/splunk"
 )
 
 func TestTimeoutFromEnv(t *testing.T) {
@@ -132,6 +137,74 @@ func TestDerivedSearchLogFile(t *testing.T) {
 		if actual := derivedSearchLogFile(input); actual != expected {
 			t.Errorf("derivedSearchLogFile(%q) = %q; want %q", input, actual, expected)
 		}
+	}
+}
+
+func TestRunSearchToFileReplacesOnlyAfterSuccess(t *testing.T) {
+	const sid = "cross-platform-output"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		switch {
+		case request.URL.Path == "/services/authentication/current-context":
+			_, _ = w.Write([]byte(`{"entry":[{}]}`))
+		case request.Method == http.MethodPost && request.URL.Path == "/services/search/jobs/":
+			if err := request.ParseForm(); err != nil {
+				t.Fatalf("parse dispatch form: %v", err)
+			}
+			if request.FormValue("search") == "fail" {
+				http.Error(w, "synthetic dispatch failure", http.StatusInternalServerError)
+				return
+			}
+			_, _ = w.Write([]byte(`<response><sid>` + sid + `</sid></response>`))
+		case request.URL.Path == "/services/search/jobs/"+sid:
+			_, _ = w.Write([]byte(`{"entry":[{"content":{"dispatchState":"DONE"}}]}`))
+		case request.URL.Path == "/services/search/v2/jobs/"+sid+"/results":
+			_, _ = w.Write([]byte(`{"results":[{"status":"current"}]}`))
+		default:
+			http.NotFound(w, request)
+		}
+	}))
+	defer server.Close()
+
+	client, err := splunk.NewClient(splunk.Config{
+		BaseURL:      server.URL,
+		Token:        "synthetic-token",
+		HTTPClient:   server.Client(),
+		PollInterval: time.Millisecond,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+
+	output := filepath.Join(t.TempDir(), "results.json")
+	if err := os.WriteFile(output, []byte("stale"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	options := splunk.SearchOptions{SearchLog: splunk.SearchLogModeOff}
+	if _, err := runSearchToFile(context.Background(), client, "success", options, output); err != nil {
+		t.Fatalf("successful replacement: %v", err)
+	}
+	actual, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(actual), `"status":"current"`) {
+		t.Fatalf("result was not replaced: %q", actual)
+	}
+
+	const lastGood = `{"results":[{"status":"last-good"}]}`
+	if err := os.WriteFile(output, []byte(lastGood), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runSearchToFile(context.Background(), client, "fail", options, output); err == nil {
+		t.Fatal("expected dispatch failure")
+	}
+	actual, err = os.ReadFile(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(actual) != lastGood {
+		t.Fatalf("failed search changed last good result: %q", actual)
 	}
 }
 
