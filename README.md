@@ -398,6 +398,7 @@ Usage:
 Run a Splunk search from a plain SPL file or from a structured YAML config.
 
 Examples:
+  querysplunk -version
   querysplunk -q query.txt -o splunkresults.json
   querysplunk -q query.txt -earliest=-15m -latest=now
   querysplunk -config search.yml
@@ -438,6 +439,8 @@ Options:
     	Write Splunk results to this file (default "splunkresults.json")
   -q string
     	Read the SPL search from this plain text file (default "query.txt")
+  -version
+	Print version and build metadata, then exit
   -write-config string
     	Write a starter YAML search config and exit
 ```
@@ -535,6 +538,16 @@ Each platform archive is a self-contained CLI bundle. It includes the
 content is an operating runbook for assistant tooling; it is not loaded by the
 `querysplunk` binary.
 
+Identify an installed binary without credentials or a Splunk connection:
+
+```bash
+querysplunk -version
+```
+
+Release binaries report a stable line containing the release version and source
+commit. Local builds that do not inject release metadata report `dev` and
+`unknown`.
+
 To test release packaging in GitHub before tagging, run the `Release` workflow
 manually and use a dry-run version such as `v0.0.0-dryrun`.
 
@@ -542,5 +555,5 @@ For local release-style packages, run:
 
 ```bash
 make clean package VERSION=v1.1.0
-make verify-package
+make verify-package VERSION=v1.1.0
 ```

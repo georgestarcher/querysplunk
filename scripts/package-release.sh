@@ -5,6 +5,9 @@ version="${1:?usage: package-release.sh VERSION [binary_name] [dist_dir]}"
 binary_name="${2:-splunkquery}"
 dist_dir="${3:-dist}"
 build_dir="build"
+commit="$(git rev-parse --short=12 HEAD 2>/dev/null || true)"
+commit="${commit:-unknown}"
+ldflags="-s -w -X main.version=${version} -X main.commit=${commit}"
 
 case "${version}" in
   v*) ;;
@@ -33,7 +36,7 @@ build_package() {
   local output="${package_dir}/${binary_name}${ext}"
 
   mkdir -p "${package_dir}"
-  CGO_ENABLED=0 GOOS="${goos}" GOARCH="${goarch}" go build -trimpath -ldflags="-s -w" -o "${output}" .
+  CGO_ENABLED=0 GOOS="${goos}" GOARCH="${goarch}" go build -trimpath -ldflags="${ldflags}" -o "${output}" .
   copy_bundle_files "${package_dir}"
 
   if [ "${goos}" = "windows" ]; then
