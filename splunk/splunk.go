@@ -844,12 +844,41 @@ func (conn SplunkConnection) dispatchQuery(ctx context.Context, query *SplunkQue
 }
 
 func (conn SplunkConnection) httpPostToFileExport(ctx context.Context, query *SplunkQuery, options DispatchOptions) error {
-	file, err := os.Create(options.OutputFile)
+	directory := filepath.Dir(options.OutputFile)
+	temporary, err := os.CreateTemp(directory, ".querysplunk-export-*")
 	if err != nil {
 		return err
 	}
-	defer file.Close()
-	return conn.exportQuery(ctx, query, options, file)
+	temporaryPath := temporary.Name()
+	defer os.Remove(temporaryPath)
+	if err := temporary.Chmod(0600); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := conn.exportQuery(ctx, query, options, temporary); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if _, err := temporary.Seek(0, io.SeekStart); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+
+	output, err := os.Create(options.OutputFile)
+	if err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	_, copyErr := io.Copy(output, temporary)
+	closeOutputErr := output.Close()
+	closeTemporaryErr := temporary.Close()
+	if copyErr != nil {
+		return copyErr
+	}
+	if closeOutputErr != nil {
+		return closeOutputErr
+	}
+	return closeTemporaryErr
 }
 
 func (conn SplunkConnection) namespaceValues(values url.Values) url.Values {

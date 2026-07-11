@@ -742,6 +742,42 @@ func TestDispatchQueryWithOptionsExportsExplicitV1(t *testing.T) {
 	}
 }
 
+func TestDispatchQueryWithOptionsExportFailurePreservesExistingOutput(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/services/search/v2/jobs/export":
+			w.WriteHeader(http.StatusNotFound)
+		case "/services/search/jobs/export":
+			w.WriteHeader(http.StatusInternalServerError)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer ts.Close()
+
+	output := t.TempDir() + "/existing.json"
+	const existing = `{"results":[{"source":"last-good-result"}]}`
+	if err := os.WriteFile(output, []byte(existing), 0600); err != nil {
+		t.Fatal(err)
+	}
+	conn := SplunkConnection{AuthToken: "token", BaseURL: ts.URL, Timeout: 5 * time.Second}
+	query := SplunkQuery{Query: "search index=_internal earliest=-15m | head 1"}
+	err := conn.DispatchQueryWithOptions(context.Background(), &query, DispatchOptions{
+		OutputFile:    output,
+		ExecutionMode: ExecutionModeExport,
+	})
+	if err == nil {
+		t.Fatal("expected export failure")
+	}
+	actual, readErr := os.ReadFile(output)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(actual) != existing {
+		t.Fatalf("failed export changed existing output: %q", actual)
+	}
+}
+
 func TestDispatchQueryWithOptionsExportErrorDoesNotLeakSensitiveURLParts(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadGateway)
