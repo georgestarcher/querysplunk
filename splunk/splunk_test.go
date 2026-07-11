@@ -23,7 +23,7 @@ func TestHTTPCallReturnsErrorOnNon2xx(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	conn := SplunkConnection{BaseURL: ts.URL}
+	conn := connection{BaseURL: ts.URL}
 	_, err := conn.httpGet(context.Background(), ts.URL, nil)
 	if err == nil {
 		t.Fatal("expected HTTP status error")
@@ -66,18 +66,18 @@ func TestLoginValidatesAuthTokenWithCurrentContext(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	conn := SplunkConnection{
+	conn := connection{
 		AuthToken: "token",
 		BaseURL:   ts.URL,
 		Timeout:   5 * time.Second,
 	}
 
-	if err := conn.Login(context.Background()); err != nil {
+	if err := conn.login(context.Background()); err != nil {
 		t.Fatalf("expected auth validation success, got %v", err)
 	}
 }
 
-func TestDispatchQueryReturnsErrorOnMalformedJobResponse(t *testing.T) {
+func TestDispatchQueryToFileReturnsErrorOnMalformedJobResponse(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/services/search/jobs/" {
 			w.Header().Set("Content-Type", "application/xml")
@@ -91,21 +91,21 @@ func TestDispatchQueryReturnsErrorOnMalformedJobResponse(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	conn := SplunkConnection{
+	conn := connection{
 		AuthToken: "token",
 		BaseURL:   ts.URL,
 		Timeout:   10 * time.Second,
 	}
-	query := SplunkQuery{Query: "search index=_internal | head 1"}
+	query := queryState{Query: "search index=_internal | head 1"}
 	output := t.TempDir() + "/out.json"
 
-	err := conn.DispatchQuery(context.Background(), &query, output)
+	err := conn.dispatchQueryToFile(context.Background(), &query, output)
 	if err == nil {
 		t.Fatal("expected XML parse error")
 	}
 }
 
-func TestDispatchQueryWritesResultsOnDone(t *testing.T) {
+func TestDispatchQueryToFileWritesResultsOnDone(t *testing.T) {
 	sid := "sid-123"
 	resultsPayload := `{"results": []}`
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -141,15 +141,15 @@ func TestDispatchQueryWritesResultsOnDone(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	conn := SplunkConnection{
+	conn := connection{
 		AuthToken: "token",
 		BaseURL:   ts.URL,
 		Timeout:   5 * time.Second,
 	}
-	query := SplunkQuery{Query: "search index=_internal | head 1"}
+	query := queryState{Query: "search index=_internal | head 1"}
 	output := t.TempDir() + "/out.json"
 
-	err := conn.DispatchQuery(context.Background(), &query, output)
+	err := conn.dispatchQueryToFile(context.Background(), &query, output)
 	if err != nil {
 		t.Fatalf("expected success, got %v", err)
 	}
@@ -172,7 +172,7 @@ func TestDispatchQueryWritesResultsOnDone(t *testing.T) {
 	}
 }
 
-func TestDispatchQuerySendsNamespaceWhenSet(t *testing.T) {
+func TestDispatchQueryToFileSendsNamespaceWhenSet(t *testing.T) {
 	sid := "sid-app"
 	resultsPayload := `{"results": []}`
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -232,22 +232,22 @@ func TestDispatchQuerySendsNamespaceWhenSet(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	conn := SplunkConnection{
+	conn := connection{
 		AuthToken:  "token",
 		BaseURL:    ts.URL,
 		AppContext: "security",
 		Timeout:    5 * time.Second,
 	}
-	query := SplunkQuery{Query: "search index=_internal | head 1"}
+	query := queryState{Query: "search index=_internal | head 1"}
 	output := t.TempDir() + "/out.json"
 
-	err := conn.DispatchQuery(context.Background(), &query, output)
+	err := conn.dispatchQueryToFile(context.Background(), &query, output)
 	if err != nil {
 		t.Fatalf("expected success, got %v", err)
 	}
 }
 
-func TestDispatchQueryReturnsErrorOnResultFetchFailure(t *testing.T) {
+func TestDispatchQueryToFileReturnsErrorOnResultFetchFailure(t *testing.T) {
 	sid := "sid-456"
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -282,15 +282,15 @@ func TestDispatchQueryReturnsErrorOnResultFetchFailure(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	conn := SplunkConnection{
+	conn := connection{
 		AuthToken: "token",
 		BaseURL:   ts.URL,
 		Timeout:   5 * time.Second,
 	}
-	query := SplunkQuery{Query: "search index=_internal | head 1"}
+	query := queryState{Query: "search index=_internal | head 1"}
 	output := t.TempDir() + "/out.json"
 
-	err := conn.DispatchQuery(context.Background(), &query, output)
+	err := conn.dispatchQueryToFile(context.Background(), &query, output)
 	if err == nil {
 		t.Fatal("expected result fetch error")
 	}
@@ -356,14 +356,14 @@ func TestDispatchQueryWithOptionsSendsDispatchAndResultParams(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	conn := SplunkConnection{
+	conn := connection{
 		AuthToken:    "token",
 		BaseURL:      ts.URL,
 		Timeout:      5 * time.Second,
 		PollInterval: time.Millisecond,
 	}
-	query := SplunkQuery{Query: "search index=_internal | head 1"}
-	options := DispatchOptions{
+	query := queryState{Query: "search index=_internal | head 1"}
+	options := dispatchOptions{
 		OutputFile: t.TempDir() + "/out.json",
 		DispatchParams: map[string][]string{
 			"earliest_time": {"-15m"},
@@ -379,7 +379,7 @@ func TestDispatchQueryWithOptionsSendsDispatchAndResultParams(t *testing.T) {
 		SearchLogMode: SearchLogModeOff,
 	}
 
-	if err := conn.DispatchQueryWithOptions(context.Background(), &query, options); err != nil {
+	if err := conn.dispatchQueryWithOptions(context.Background(), &query, options); err != nil {
 		t.Fatalf("expected success, got %v", err)
 	}
 	if query.SearchLogRead {
@@ -430,21 +430,21 @@ func TestDispatchQueryWithOptionsUsesV2ResultsWhenAvailable(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	conn := SplunkConnection{
+	conn := connection{
 		AuthToken:    "token",
 		BaseURL:      ts.URL,
 		Timeout:      5 * time.Second,
 		PollInterval: time.Millisecond,
 	}
-	query := SplunkQuery{Query: "search index=_internal earliest=-15m | head 1"}
-	options := DispatchOptions{
+	query := queryState{Query: "search index=_internal earliest=-15m | head 1"}
+	options := dispatchOptions{
 		OutputFile:         t.TempDir() + "/out.json",
 		ResultEndpointMode: ResultEndpointAuto,
 		ResultParams:       map[string][]string{"count": {"0"}},
 		SearchLogMode:      SearchLogModeOff,
 	}
 
-	if err := conn.DispatchQueryWithOptions(context.Background(), &query, options); err != nil {
+	if err := conn.dispatchQueryWithOptions(context.Background(), &query, options); err != nil {
 		t.Fatalf("expected success, got %v", err)
 	}
 	if got := v2Calls.Load(); got != 1 {
@@ -495,20 +495,20 @@ func TestDispatchQueryWithOptionsFallsBackToV1Results(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	conn := SplunkConnection{
+	conn := connection{
 		AuthToken:    "token",
 		BaseURL:      ts.URL,
 		Timeout:      5 * time.Second,
 		PollInterval: time.Millisecond,
 	}
-	query := SplunkQuery{Query: "search index=_internal earliest=-15m | head 1"}
-	options := DispatchOptions{
+	query := queryState{Query: "search index=_internal earliest=-15m | head 1"}
+	options := dispatchOptions{
 		OutputFile:         t.TempDir() + "/out.json",
 		ResultEndpointMode: ResultEndpointAuto,
 		SearchLogMode:      SearchLogModeOff,
 	}
 
-	if err := conn.DispatchQueryWithOptions(context.Background(), &query, options); err != nil {
+	if err := conn.dispatchQueryWithOptions(context.Background(), &query, options); err != nil {
 		t.Fatalf("expected success, got %v", err)
 	}
 	if got := v2Calls.Load(); got != 1 {
@@ -557,20 +557,20 @@ func TestDispatchQueryWithOptionsHonorsV1ResultEndpoint(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	conn := SplunkConnection{
+	conn := connection{
 		AuthToken:    "token",
 		BaseURL:      ts.URL,
 		Timeout:      5 * time.Second,
 		PollInterval: time.Millisecond,
 	}
-	query := SplunkQuery{Query: "search index=_internal earliest=-15m | head 1"}
-	options := DispatchOptions{
+	query := queryState{Query: "search index=_internal earliest=-15m | head 1"}
+	options := dispatchOptions{
 		OutputFile:         t.TempDir() + "/out.json",
 		ResultEndpointMode: ResultEndpointV1,
 		SearchLogMode:      SearchLogModeOff,
 	}
 
-	if err := conn.DispatchQueryWithOptions(context.Background(), &query, options); err != nil {
+	if err := conn.dispatchQueryWithOptions(context.Background(), &query, options); err != nil {
 		t.Fatalf("expected success, got %v", err)
 	}
 	if got := v2Calls.Load(); got != 0 {
@@ -609,18 +609,18 @@ func TestDispatchQueryWithOptionsExportsUsingV2WhenAvailable(t *testing.T) {
 	defer ts.Close()
 
 	output := t.TempDir() + "/export.json"
-	conn := SplunkConnection{
+	conn := connection{
 		AuthToken: "token",
 		BaseURL:   ts.URL,
 		Timeout:   5 * time.Second,
 	}
-	query := SplunkQuery{Query: "search index=_internal earliest=-15m | head 1"}
-	options := DispatchOptions{
+	query := queryState{Query: "search index=_internal earliest=-15m | head 1"}
+	options := dispatchOptions{
 		OutputFile:    output,
 		ExecutionMode: ExecutionModeExport,
 	}
 
-	if err := conn.DispatchQueryWithOptions(context.Background(), &query, options); err != nil {
+	if err := conn.dispatchQueryWithOptions(context.Background(), &query, options); err != nil {
 		t.Fatalf("expected export success, got %v", err)
 	}
 	if got := v2Calls.Load(); got != 1 {
@@ -672,19 +672,19 @@ func TestDispatchQueryWithOptionsExportsFallbackToV1(t *testing.T) {
 	defer ts.Close()
 
 	output := t.TempDir() + "/export.json"
-	conn := SplunkConnection{
+	conn := connection{
 		AuthToken: "token",
 		BaseURL:   ts.URL,
 		Timeout:   5 * time.Second,
 	}
-	query := SplunkQuery{Query: "search index=_internal earliest=-15m | head 1"}
-	options := DispatchOptions{
+	query := queryState{Query: "search index=_internal earliest=-15m | head 1"}
+	options := dispatchOptions{
 		OutputFile:    output,
 		ExecutionMode: ExecutionModeExport,
 		ResultParams:  map[string][]string{"count": {"0"}},
 	}
 
-	if err := conn.DispatchQueryWithOptions(context.Background(), &query, options); err != nil {
+	if err := conn.dispatchQueryWithOptions(context.Background(), &query, options); err != nil {
 		t.Fatalf("expected export success, got %v", err)
 	}
 	if got := v2Calls.Load(); got != 1 {
@@ -722,19 +722,19 @@ func TestDispatchQueryWithOptionsExportsExplicitV1(t *testing.T) {
 	defer ts.Close()
 
 	output := t.TempDir() + "/export.json"
-	conn := SplunkConnection{
+	conn := connection{
 		AuthToken: "token",
 		BaseURL:   ts.URL,
 		Timeout:   5 * time.Second,
 	}
-	query := SplunkQuery{Query: "search index=_internal earliest=-15m | head 1"}
-	options := DispatchOptions{
+	query := queryState{Query: "search index=_internal earliest=-15m | head 1"}
+	options := dispatchOptions{
 		OutputFile:         output,
 		ExecutionMode:      ExecutionModeExport,
 		ResultEndpointMode: ResultEndpointV1,
 	}
 
-	if err := conn.DispatchQueryWithOptions(context.Background(), &query, options); err != nil {
+	if err := conn.dispatchQueryWithOptions(context.Background(), &query, options); err != nil {
 		t.Fatalf("expected export success, got %v", err)
 	}
 	if got := v2Calls.Load(); got != 0 {
@@ -760,9 +760,9 @@ func TestDispatchQueryWithOptionsExportFailurePreservesExistingOutput(t *testing
 	if err := os.WriteFile(output, []byte(existing), 0600); err != nil {
 		t.Fatal(err)
 	}
-	conn := SplunkConnection{AuthToken: "token", BaseURL: ts.URL, Timeout: 5 * time.Second}
-	query := SplunkQuery{Query: "search index=_internal earliest=-15m | head 1"}
-	err := conn.DispatchQueryWithOptions(context.Background(), &query, DispatchOptions{
+	conn := connection{AuthToken: "token", BaseURL: ts.URL, Timeout: 5 * time.Second}
+	query := queryState{Query: "search index=_internal earliest=-15m | head 1"}
+	err := conn.dispatchQueryWithOptions(context.Background(), &query, dispatchOptions{
 		OutputFile:    output,
 		ExecutionMode: ExecutionModeExport,
 	})
@@ -788,18 +788,18 @@ func TestDispatchQueryWithOptionsExportErrorDoesNotLeakSensitiveURLParts(t *test
 	}))
 	defer ts.Close()
 
-	conn := SplunkConnection{
+	conn := connection{
 		AuthToken: "token",
 		BaseURL:   strings.Replace(ts.URL, "://", "://user:pass@", 1),
 		Timeout:   5 * time.Second,
 	}
-	query := SplunkQuery{Query: "search index=_internal earliest=-15m | head 1"}
-	options := DispatchOptions{
+	query := queryState{Query: "search index=_internal earliest=-15m | head 1"}
+	options := dispatchOptions{
 		OutputFile:    t.TempDir() + "/export.json",
 		ExecutionMode: ExecutionModeExport,
 	}
 
-	err := conn.DispatchQueryWithOptions(context.Background(), &query, options)
+	err := conn.dispatchQueryWithOptions(context.Background(), &query, options)
 	if err == nil {
 		t.Fatal("expected export error")
 	}
@@ -845,14 +845,14 @@ func TestDispatchQueryWithOptionsSavesSearchLog(t *testing.T) {
 
 	tempDir := t.TempDir()
 	searchLogFile := tempDir + "/custom-search.log"
-	conn := SplunkConnection{
+	conn := connection{
 		AuthToken:    "token",
 		BaseURL:      ts.URL,
 		Timeout:      5 * time.Second,
 		PollInterval: time.Millisecond,
 	}
-	query := SplunkQuery{Query: "search index=_internal | head 1"}
-	options := DispatchOptions{
+	query := queryState{Query: "search index=_internal | head 1"}
+	options := dispatchOptions{
 		OutputFile:     tempDir + "/out.json",
 		SearchLogMode:  SearchLogModeBoth,
 		SearchLogFile:  searchLogFile,
@@ -860,7 +860,7 @@ func TestDispatchQueryWithOptionsSavesSearchLog(t *testing.T) {
 		DispatchParams: map[string][]string{},
 	}
 
-	if err := conn.DispatchQueryWithOptions(context.Background(), &query, options); err != nil {
+	if err := conn.dispatchQueryWithOptions(context.Background(), &query, options); err != nil {
 		t.Fatalf("expected success, got %v", err)
 	}
 	if !query.SearchLogRead {
@@ -915,13 +915,13 @@ func TestJobStatusReturnsErrorOnFailedState(t *testing.T) {
 			}))
 			defer ts.Close()
 
-			conn := SplunkConnection{
+			conn := connection{
 				AuthToken:    "token",
 				BaseURL:      ts.URL,
 				Timeout:      30 * time.Second,
 				PollInterval: time.Millisecond,
 			}
-			query := SplunkQuery{Job: SplunkJob{Sid: sid}}
+			query := queryState{Job: splunkJob{Sid: sid}}
 			err := conn.jobStatus(context.Background(), &query)
 			if err == nil {
 				t.Fatal("expected terminal state error")
@@ -951,13 +951,13 @@ func TestJobStatusCancelsRemoteJobOnContextCancelAfterSidExists(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	conn := SplunkConnection{
+	conn := connection{
 		AuthToken:    "token",
 		BaseURL:      ts.URL,
 		Timeout:      30 * time.Second,
 		PollInterval: time.Millisecond,
 	}
-	query := SplunkQuery{Job: SplunkJob{Sid: sid}}
+	query := queryState{Job: splunkJob{Sid: sid}}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -975,11 +975,11 @@ func TestJobStatusCancelsRemoteJobOnContextCancelAfterSidExists(t *testing.T) {
 }
 
 func TestJobStatusDoesNotCancelRemoteJobWithoutSid(t *testing.T) {
-	conn := SplunkConnection{
+	conn := connection{
 		AuthToken: "token",
 		Timeout:   30 * time.Second,
 	}
-	query := SplunkQuery{}
+	query := queryState{}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -994,7 +994,7 @@ func TestJobStatusDoesNotCancelRemoteJobWithoutSid(t *testing.T) {
 	}
 }
 
-func TestDispatchQueryFetchesSearchLogOnFailedJob(t *testing.T) {
+func TestDispatchQueryToFileFetchesSearchLogOnFailedJob(t *testing.T) {
 	sid := "sid-failure-log"
 	var searchLogCalls atomic.Int32
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1023,14 +1023,14 @@ func TestDispatchQueryFetchesSearchLogOnFailedJob(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	conn := SplunkConnection{
+	conn := connection{
 		AuthToken:    "token",
 		BaseURL:      ts.URL,
 		Timeout:      5 * time.Second,
 		PollInterval: time.Millisecond,
 	}
-	query := SplunkQuery{Query: "search index=_internal | head 1"}
-	err := conn.DispatchQuery(context.Background(), &query, t.TempDir()+"/out.json")
+	query := queryState{Query: "search index=_internal | head 1"}
+	err := conn.dispatchQueryToFile(context.Background(), &query, t.TempDir()+"/out.json")
 	if err == nil {
 		t.Fatal("expected failed job error")
 	}

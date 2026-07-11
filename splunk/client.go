@@ -54,7 +54,7 @@ type Config struct {
 // connections owned by the client and leaves a caller-supplied HTTPClient open.
 type Client struct {
 	mu            sync.Mutex
-	conn          SplunkConnection
+	conn          connection
 	authenticated bool
 	ownedClient   *http.Client
 }
@@ -122,7 +122,7 @@ func NewClient(config Config) (*Client, error) {
 	}
 
 	return &Client{
-		conn: SplunkConnection{
+		conn: connection{
 			Username:     config.Username,
 			Password:     config.Password,
 			BaseURL:      baseURL,
@@ -149,7 +149,7 @@ func (client *Client) Authenticate(ctx context.Context) error {
 	if client.authenticated {
 		return nil
 	}
-	if err := client.conn.Login(ctx); err != nil {
+	if err := client.conn.login(ctx); err != nil {
 		return fmt.Errorf("authenticate with Splunk: %w", err)
 	}
 	client.authenticated = true
@@ -192,8 +192,8 @@ func (client *Client) SearchTo(ctx context.Context, search string, options Searc
 	conn := client.conn
 	client.mu.Unlock()
 
-	query := SplunkQuery{Query: search}
-	dispatch := DispatchOptions{
+	query := queryState{Query: search}
+	dispatch := dispatchOptions{
 		DispatchParams:     cloneParams(options.DispatchParams),
 		ResultParams:       cloneParams(options.ResultParams),
 		ResultEndpointMode: options.ResultEndpoint,
@@ -243,7 +243,7 @@ func cloneParams(params map[string][]string) map[string][]string {
 	return cloned
 }
 
-func resultFromQuery(query SplunkQuery, data []byte) Result {
+func resultFromQuery(query queryState, data []byte) Result {
 	return Result{
 		Data:          data,
 		JobID:         query.Job.Sid,
