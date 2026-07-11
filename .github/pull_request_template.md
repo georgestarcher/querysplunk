@@ -5,11 +5,9 @@
 ## Validation
 
 - [ ] `go test ./...`
-- [ ] `(cd splunk && go test ./...)`
 - [ ] `go test -race ./...`
-- [ ] `(cd splunk && go test -race ./...)`
 - [ ] `go vet ./...`
-- [ ] `(cd splunk && go vet ./...)`
+- [ ] `go test ./splunk -run '^$' -fuzz '^FuzzAnalyzeJobLog$' -fuzztime 5s`
 - [ ] GitHub Actions passed
 
 ## Splunk Integration Impact

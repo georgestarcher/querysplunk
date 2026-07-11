@@ -1,7 +1,7 @@
 # This workflow will build a golang project
 # For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-go
 # Integration workflow note:
-# - Normal CI on push/pull_request runs only unit, race, lint, tidy, and vuln checks.
+# - Normal CI on push/pull_request runs unit, race, fuzz, lint, tidy, and vuln checks.
 # - Live Splunk integration tests run only via manual workflow_dispatch with run_integration_tests=true.
 # Required GitHub environment secrets for integration.
 # Configure these in the AUTH_TOKEN environment:
@@ -59,19 +59,17 @@ jobs:
     - name: Build
       run: go build -v ./...
 
-    - name: Test root module
-      run: go test -v ./...
+    - name: Test with coverage
+      run: go test -v -coverprofile=coverage.out ./...
 
-    - name: Test splunk module
-      working-directory: splunk
-      run: go test -v ./...
+    - name: Report splunk package coverage
+      run: go tool cover -func=coverage.out
 
-    - name: Test with race detector (root)
+    - name: Test with race detector
       run: go test -race -v ./...
 
-    - name: Test splunk module with race detector
-      working-directory: splunk
-      run: go test -race -v ./...
+    - name: Fuzz search log parser
+      run: go test ./splunk -run '^$' -fuzz '^FuzzAnalyzeJobLog$' -fuzztime 5s
 
     - name: Vet
       run: go vet ./...
@@ -81,29 +79,15 @@ jobs:
         go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
         go install golang.org/x/vuln/cmd/govulncheck@latest
 
-    - name: Lint root module
+    - name: Lint
       run: golangci-lint run ./...
 
-    - name: Lint splunk module
-      working-directory: splunk
-      run: golangci-lint run ./...
-
-    - name: Check root module tidy
-      run: |
-        go mod tidy
-        git diff --exit-code -- go.mod go.sum
-
-    - name: Check splunk module tidy
-      working-directory: splunk
+    - name: Check module tidy
       run: |
         go mod tidy
         git diff --exit-code -- go.mod go.sum
 
     - name: Vulnerability check (govulncheck)
-      run: govulncheck ./...
-
-    - name: Vulnerability check (splunk module)
-      working-directory: splunk
       run: govulncheck ./...
 
   integration:
@@ -129,8 +113,7 @@ jobs:
           SPLUNKTIMEOUT: ${{ secrets.SPLUNKTIMEOUT }}
           SPLUNKAPP: ${{ secrets.SPLUNKAPP }}
           SPLUNK_INTEGRATION_QUERY: ${{ secrets.SPLUNK_INTEGRATION_QUERY }}
-        working-directory: splunk
-        run: go test -v -tags integration ./...
+        run: go test -v -tags integration ./splunk
       - name: Test live YAML config integration
         env:
           SPLUNKBASEURL: ${{ secrets.SPLUNKBASEURL }}

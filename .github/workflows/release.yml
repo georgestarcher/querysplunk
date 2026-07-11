@@ -28,9 +28,7 @@ jobs:
           cache: true
 
       - name: Test
-        run: |
-          go test ./...
-          (cd splunk && go test ./...)
+        run: go test ./...
 
       - name: Build release assets
         run: |

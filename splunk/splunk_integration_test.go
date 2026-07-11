@@ -3,6 +3,7 @@
 package splunk
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"strconv"
@@ -56,50 +57,52 @@ func TestDispatchQueryIntegration(t *testing.T) {
 		timeout = time.Duration(seconds) * time.Second
 	}
 
-	conn := SplunkConnection{
-		AppContext: appContext,
-		Username:   username,
-		Password:   password,
-		AuthToken:  token,
-		BaseURL:    baseURL,
-		TLSVerify:  tlsVerify,
-		Timeout:    timeout,
+	client, err := NewClient(Config{
+		App:                appContext,
+		Username:           username,
+		Password:           password,
+		Token:              token,
+		BaseURL:            baseURL,
+		InsecureSkipVerify: !tlsVerify,
+		Timeout:            timeout,
+	})
+	if err != nil {
+		t.Fatalf("create client: %v", err)
 	}
+	defer client.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	if err := conn.Login(ctx); err != nil {
+	if err := client.Authenticate(ctx); err != nil {
 		t.Fatalf("login failed: %v", err)
 	}
 
-	query := SplunkQuery{Query: queryString}
-	output := t.TempDir() + "/splunkresults.json"
-	if err := conn.DispatchQuery(ctx, &query, output); err != nil {
+	var output bytes.Buffer
+	result, err := client.SearchTo(ctx, queryString, SearchOptions{SearchLog: SearchLogModeSummary}, &output)
+	if err != nil {
 		t.Fatalf("dispatch/query failed: %v", err)
 	}
-
-	data, err := os.ReadFile(output)
-	if err != nil {
-		t.Fatalf("expected output file to exist: %v", err)
-	}
-	if len(data) == 0 {
+	if output.Len() == 0 {
 		t.Fatalf("expected non-empty query output")
 	}
-	if query.Job.Sid == "" {
+	if result.Data != nil {
+		t.Fatal("expected SearchTo to stream without retaining result data")
+	}
+	if result.JobID == "" {
 		t.Fatal("expected dispatched query to have a search job id")
 	}
-	if !query.SearchLogRead {
+	if !result.SearchLogRead {
 		t.Fatal("expected integration test to fetch search.log for the search job")
 	}
-	t.Logf("search job id: %s", query.Job.Sid)
-	if query.LogDiagnostics.ExecutionDuration != "" {
-		t.Logf("search execution duration from search.log: %s", query.LogDiagnostics.ExecutionDuration)
+	t.Logf("search job id: %s", result.JobID)
+	if result.Diagnostics.ExecutionDuration != "" {
+		t.Logf("search execution duration from search.log: %s", result.Diagnostics.ExecutionDuration)
 	}
-	for _, warning := range query.LogDiagnostics.Warnings {
+	for _, warning := range result.Diagnostics.Warnings {
 		t.Logf("search.log warning: %s", warning)
 	}
-	for _, diagnosticError := range query.LogDiagnostics.Errors {
+	for _, diagnosticError := range result.Diagnostics.Errors {
 		t.Logf("search.log error: %s", diagnosticError)
 	}
 }

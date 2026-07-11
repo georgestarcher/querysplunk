@@ -12,12 +12,12 @@ Run root CLI YAML integration:
 go test -v -tags integration ./...
 ```
 
-Run lower-level Splunk client integration:
+Run only the lower-level Splunk client integration:
 
 ```bash
-(cd splunk && go test -v -tags integration ./...)
+go test -v -tags integration ./splunk
 ```
 
-The root integration test runs `examples/health/splunkd-health.yml`. The splunk module integration test uses `SPLUNK_INTEGRATION_QUERY` when set, otherwise it falls back to `query.txt`.
+The root integration test runs `examples/health/splunkd-health.yml`. The splunk package integration test uses `SPLUNK_INTEGRATION_QUERY` when set, otherwise it falls back to `query.txt`.
 
 In GitHub Actions, live Splunk integration is manual: run the `Go` workflow with `run_integration_tests=true`. The workflow expects secrets in the `AUTH_TOKEN` environment.
