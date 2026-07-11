@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -551,6 +552,7 @@ func main() {
 		BaseURL:            baseURL,
 		InsecureSkipVerify: !tlsVerify,
 		Timeout:            timeout,
+		Logger:             slog.New(slog.NewTextHandler(new(logWriter), &slog.HandlerOptions{Level: slog.LevelInfo})),
 	})
 	if err != nil {
 		log.Fatalf("ERROR: Invalid Splunk configuration: %s", err)

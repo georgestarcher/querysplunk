@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -36,7 +37,9 @@ func (err *JobStateError) Error() string {
 // Username and Password. TLS certificates are verified unless
 // InsecureSkipVerify is explicitly set. HTTPClient may be supplied for testing
 // or a custom transport; when set, Timeout and InsecureSkipVerify must remain
-// zero because the caller owns those policies and the HTTP client.
+// zero because the caller owns those policies and the HTTP client. Logger is
+// optional; when nil, the package emits no logs. A supplied logger may be used
+// concurrently and receives only bounded, non-sensitive operational fields.
 type Config struct {
 	BaseURL            string
 	Token              string
@@ -47,6 +50,7 @@ type Config struct {
 	PollInterval       time.Duration
 	InsecureSkipVerify bool
 	HTTPClient         *http.Client
+	Logger             *slog.Logger
 }
 
 // Client is a Splunk REST client. Its zero value is not usable; construct one
@@ -132,6 +136,7 @@ func NewClient(config Config) (*Client, error) {
 			Timeout:      timeout,
 			PollInterval: config.PollInterval,
 			client:       httpClient,
+			logger:       config.Logger,
 		},
 		ownedClient: ownedClient,
 	}, nil

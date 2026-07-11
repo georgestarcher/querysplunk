@@ -3,6 +3,7 @@ package splunk_test
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"os"
 	"time"
 
@@ -15,6 +16,7 @@ func ExampleClient() {
 		Token:   os.Getenv("SPLUNKTOKEN"),
 		Timeout: 2 * time.Minute,
 		App:     "search",
+		Logger:  slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	})
 	if errors.Is(err, splunk.ErrInvalidConfig) || err != nil {
 		return
