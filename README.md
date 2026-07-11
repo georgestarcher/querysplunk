@@ -15,6 +15,93 @@ If you build from source, Go resolves these dependencies automatically:
 - https://github.com/joho/godotenv
 - https://gopkg.in/yaml.v3
 
+## Use as a Go package
+
+Applications can import the reusable client directly:
+
+```go
+import "github.com/georgestarcher/querysplunk/v2/splunk"
+```
+
+The package is part of this repository's v2 Go module and follows its release
+versions. Use `splunk.NewClient` for application code. The older
+`SplunkConnection` and `SplunkQuery` API remains available for compatibility
+with the CLI, but it exposes mutable request state and is not the recommended
+consumer boundary.
+
+A typical application creates one client, authenticates early, reuses it for
+concurrent searches, and closes it during shutdown:
+
+```go
+client, err := splunk.NewClient(splunk.Config{
+    BaseURL: os.Getenv("SPLUNKBASEURL"),
+    Token:   os.Getenv("SPLUNKTOKEN"),
+    App:     "search",
+})
+if err != nil {
+    return err
+}
+defer client.Close()
+
+ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+defer cancel()
+if err := client.Authenticate(ctx); err != nil {
+    return err
+}
+
+result, err := client.Search(ctx,
+    "search index=_internal earliest=-15m | stats count",
+    splunk.SearchOptions{
+        DispatchParams: map[string][]string{"latest_time": {"now"}},
+        ResultParams:   map[string][]string{"output_mode": {"json"}},
+        SearchLog:      splunk.SearchLogModeSummary,
+    },
+)
+if err != nil {
+    var statusErr *splunk.HTTPStatusError
+    var stateErr *splunk.JobStateError
+    switch {
+    case errors.Is(err, context.DeadlineExceeded):
+        return err
+    case errors.As(err, &statusErr):
+        return fmt.Errorf("Splunk REST request failed with status %d: %w", statusErr.StatusCode, err)
+    case errors.As(err, &stateErr):
+        return fmt.Errorf("Splunk search ended in %s: %w", stateErr.State, err)
+    default:
+        return err
+    }
+}
+```
+
+`Client.Search` returns the unmodified Splunk response in `Result.Data`, plus
+the job ID, final state, and bounded `search.log` diagnostics. Use
+`Client.SearchTo` with an `io.Writer` to stream large job or export responses
+without a temporary file or a complete in-memory copy. The client copies
+parameter maps before use and is safe for concurrent searches after
+authentication. Each returned byte slice belongs to the caller.
+
+Important package boundaries and limits:
+
+- The package executes SPL; it does not parse the CLI YAML format or enforce the
+  CLI's one-year and `index=*` safety policy. Applications must validate and
+  bound user-provided SPL before calling it.
+- TLS verification is on by default. `InsecureSkipVerify` is an explicit escape
+  hatch for controlled development systems, not a production default.
+- `Search` buffers result bodies in memory. Use `SearchTo` and a caller-owned
+  writer for potentially large responses. A writer error can leave partial
+  output; the returned `Result` still contains available job provenance.
+- Export searches have no job ID or `search.log`.
+- Treat result data and full search logs as sensitive. Do not log credentials,
+  private URLs, SPL, or raw events. Retain only necessary provenance.
+- Prefer synthetic `httptest` regression fixtures. Never commit real tokens,
+  tenant URLs, private index names, or production events.
+
+The package example is compiled by `go test`. Run focused and complete checks:
+
+```bash
+go test -race ./...
+```
+
 ## Quick setup
 
 ```bash
@@ -335,7 +422,6 @@ Run:
 
 ```bash
 go test -v -tags integration ./...
-(cd splunk && go test -v -tags integration ./...)
 ```
 
 Required environment variables for integration runs:
@@ -345,7 +431,7 @@ Required environment variables for integration runs:
 - optional: `SPLUNKTLSVERIFY`, `SPLUNKTIMEOUT`, `SPLUNKAPP`
 
 The root integration test runs the CLI with
-`examples/health/splunkd-health.yml`. The `splunk` module integration test
+`examples/health/splunkd-health.yml`. The `splunk` package integration test
 exercises the lower-level Splunk client and uses `SPLUNK_INTEGRATION_QUERY`
 when provided.
 
