@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -80,6 +81,44 @@ func readSearchFile(path string) (string, error) {
 		return "", fmt.Errorf("SPL query file %q is empty", path)
 	}
 	return search, nil
+}
+
+func runSearchToFile(ctx context.Context, client *splunk.Client, search string, options splunk.SearchOptions, outputFile string) (splunk.Result, error) {
+	directory := filepath.Dir(outputFile)
+	temporary, err := os.CreateTemp(directory, ".querysplunk-result-*")
+	if err != nil {
+		return splunk.Result{}, err
+	}
+	temporaryPath := temporary.Name()
+	defer os.Remove(temporaryPath)
+	if err := temporary.Chmod(0600); err != nil {
+		_ = temporary.Close()
+		return splunk.Result{}, err
+	}
+
+	result, err := client.SearchTo(ctx, search, options, temporary)
+	if err != nil {
+		_ = temporary.Close()
+		return result, err
+	}
+	if err := temporary.Close(); err != nil {
+		return result, err
+	}
+	if err := os.Rename(temporaryPath, outputFile); err != nil {
+		return result, err
+	}
+	return result, nil
+}
+
+func derivedSearchLogFile(outputFile string) string {
+	if strings.TrimSpace(outputFile) == "" {
+		return "splunk.search.log"
+	}
+	ext := filepath.Ext(outputFile)
+	if ext == "" {
+		return outputFile + ".search.log"
+	}
+	return strings.TrimSuffix(outputFile, ext) + ".search.log"
 }
 
 const skeletonSearchConfig = `app: search
@@ -504,35 +543,41 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	conn := splunk.SplunkConnection{
-		AppContext: appContext,
-		Username:   username,
-		Password:   password,
-		AuthToken:  splunkToken,
-		BaseURL:    baseURL,
-		TLSVerify:  tlsVerify,
-		Timeout:    timeout,
+	client, err := splunk.NewClient(splunk.Config{
+		App:                appContext,
+		Username:           username,
+		Password:           password,
+		Token:              splunkToken,
+		BaseURL:            baseURL,
+		InsecureSkipVerify: !tlsVerify,
+		Timeout:            timeout,
+	})
+	if err != nil {
+		log.Fatalf("ERROR: Invalid Splunk configuration: %s", err)
 	}
+	defer client.Close()
 
-	if err = conn.Login(ctx); err != nil {
+	if err = client.Authenticate(ctx); err != nil {
 		log.Fatalf("ERROR: Couldn't login to Splunk: %s", err)
 	}
 
-	splunkQuery := splunk.SplunkQuery{Query: splunkQueryString}
-	options := splunk.DefaultDispatchOptions(outputFile)
+	options := splunk.SearchOptions{}
 	if configFile != "" {
 		options.DispatchParams = dispatchParams(config.Dispatch)
 		options.ResultParams = resultParams(config.Results)
 		if strings.TrimSpace(config.Results.Endpoint) != "" {
-			options.ResultEndpointMode = splunk.ResultEndpointMode(strings.TrimSpace(config.Results.Endpoint))
+			options.ResultEndpoint = splunk.ResultEndpointMode(strings.TrimSpace(config.Results.Endpoint))
 		}
 		if strings.TrimSpace(config.Mode) != "" {
 			options.ExecutionMode = splunk.ExecutionMode(strings.TrimSpace(config.Mode))
 		}
 		if strings.TrimSpace(config.Diagnostics.SearchLog) != "" {
-			options.SearchLogMode = splunk.SearchLogMode(strings.TrimSpace(config.Diagnostics.SearchLog))
+			options.SearchLog = splunk.SearchLogMode(strings.TrimSpace(config.Diagnostics.SearchLog))
 		}
 		options.SearchLogFile = strings.TrimSpace(config.Diagnostics.SearchLogFile)
+	}
+	if (options.SearchLog == splunk.SearchLogModeSave || options.SearchLog == splunk.SearchLogModeBoth) && options.SearchLogFile == "" {
+		options.SearchLogFile = derivedSearchLogFile(outputFile)
 	}
 	if options.DispatchParams == nil {
 		options.DispatchParams = make(map[string][]string)
@@ -560,7 +605,7 @@ func main() {
 		}
 		log.Fatal("ERROR: search blocked by safety controls")
 	}
-	if err = conn.DispatchQueryWithOptions(ctx, &splunkQuery, options); err != nil {
+	if _, err = runSearchToFile(ctx, client, splunkQueryString, options, outputFile); err != nil {
 		log.Fatalf("ERROR: %s", err)
 	}
 

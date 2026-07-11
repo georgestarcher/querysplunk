@@ -24,10 +24,8 @@ import "github.com/georgestarcher/querysplunk/v2/splunk"
 ```
 
 The package is part of this repository's v2 Go module and follows its release
-versions. Use `splunk.NewClient` for application code. The older
-`SplunkConnection` and `SplunkQuery` API remains available for compatibility
-with the CLI, but it exposes mutable request state and is not the recommended
-consumer boundary.
+versions. Use `splunk.NewClient` for application code. Transport, authentication,
+job polling, and mutable request state remain package implementation details.
 
 A typical application creates one client, authenticates early, reuses it for
 concurrent searches, and closes it during shutdown:

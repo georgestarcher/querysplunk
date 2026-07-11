@@ -21,12 +21,12 @@ import (
 
 // Data Structures
 
-// SplunkConnection contains legacy mutable connection state.
+// connection contains legacy mutable connection state.
 // Deprecated: use Client and Config.
-type SplunkConnection struct {
+type connection struct {
 	Username, Password, BaseURL string
 	AppContext                  string
-	SessionKey                  SessionKey
+	sessionKey                  sessionKey
 	AuthToken                   string
 	TLSVerify                   bool
 	Timeout                     time.Duration
@@ -34,25 +34,25 @@ type SplunkConnection struct {
 	client                      *http.Client
 }
 
-// SessionKey is a legacy decoded login response.
+// sessionKey is a legacy decoded login response.
 // Deprecated: Client manages session keys internally.
-type SessionKey struct {
+type sessionKey struct {
 	Value string `json:"sessionKey"`
 }
 
-// SplunkJob is a legacy decoded dispatch response.
+// splunkJob is a legacy decoded dispatch response.
 // Deprecated: use Result.JobID.
-type SplunkJob struct {
+type splunkJob struct {
 	XMLName xml.Name `xml:"response"`
 	Text    string   `xml:",chardata"`
 	Sid     string   `xml:"sid"`
 }
 
-// SplunkQuery contains legacy mutable search state.
+// queryState contains legacy mutable search state.
 // Deprecated: use Client.Search and Result.
-type SplunkQuery struct {
+type queryState struct {
 	Query          string
-	Job            SplunkJob
+	Job            splunkJob
 	State          string
 	Results        []byte
 	LogDiagnostics JobLogDiagnostics
@@ -60,9 +60,9 @@ type SplunkQuery struct {
 	SearchLogFile  string
 }
 
-// SplunkJobStatus is a legacy decoded status response.
+// splunkJobStatus is a legacy decoded status response.
 // Deprecated: job status parsing is an implementation detail.
-type SplunkJobStatus struct {
+type splunkJobStatus struct {
 	Entry []struct {
 		Content map[string]any `json:"content"`
 	} `json:"entry"`
@@ -115,9 +115,9 @@ const (
 	ExecutionModeExport ExecutionMode = "export"
 )
 
-// DispatchOptions controls the legacy mutable dispatch API.
+// dispatchOptions controls the legacy mutable dispatch API.
 // Deprecated: use SearchOptions.
-type DispatchOptions struct {
+type dispatchOptions struct {
 	OutputFile         string
 	DispatchParams     map[string][]string
 	ResultParams       map[string][]string
@@ -156,7 +156,7 @@ var (
 
 // Web Methods
 
-func (conn SplunkConnection) httpClient() *http.Client {
+func (conn connection) httpClient() *http.Client {
 	if conn.client != nil {
 		return conn.client
 	}
@@ -167,15 +167,15 @@ func (conn SplunkConnection) httpClient() *http.Client {
 	return client
 }
 
-func (conn SplunkConnection) httpGet(ctx context.Context, url string, data *url.Values) (string, error) {
+func (conn connection) httpGet(ctx context.Context, url string, data *url.Values) (string, error) {
 	return conn.httpCall(ctx, url, http.MethodGet, data)
 }
 
-func (conn SplunkConnection) httpPost(ctx context.Context, url string, data *url.Values) (string, error) {
+func (conn connection) httpPost(ctx context.Context, url string, data *url.Values) (string, error) {
 	return conn.httpCall(ctx, url, http.MethodPost, data)
 }
 
-func (conn SplunkConnection) httpCallToWriter(ctx context.Context, requestURL string, method string, data *url.Values, output io.Writer) error {
+func (conn connection) httpCallToWriter(ctx context.Context, requestURL string, method string, data *url.Values, output io.Writer) error {
 	client := conn.httpClient()
 	var payload io.Reader
 	if method == http.MethodGet && data != nil {
@@ -226,7 +226,7 @@ func (conn SplunkConnection) httpCallToWriter(ctx context.Context, requestURL st
 	return err
 }
 
-func (conn SplunkConnection) httpCall(ctx context.Context, requestURL string, method string, data *url.Values) (string, error) {
+func (conn connection) httpCall(ctx context.Context, requestURL string, method string, data *url.Values) (string, error) {
 	client := conn.httpClient()
 
 	var payload io.Reader
@@ -299,12 +299,12 @@ func safeURLForLog(rawURL string) string {
 	return fmt.Sprintf("scheme=%s host=%s path=%s", parsedURL.Scheme, parsedURL.Host, path)
 }
 
-func (conn SplunkConnection) addAuthHeader(request *http.Request) {
+func (conn connection) addAuthHeader(request *http.Request) {
 	// use auth token first if provided. then session key if already obtained. login with credentials last
 	if conn.AuthToken != "" {
 		request.Header.Add("Authorization", fmt.Sprintf("Bearer %s", conn.AuthToken))
-	} else if conn.SessionKey.Value != "" {
-		request.Header.Add("Authorization", fmt.Sprintf("Splunk %s", conn.SessionKey.Value))
+	} else if conn.sessionKey.Value != "" {
+		request.Header.Add("Authorization", fmt.Sprintf("Splunk %s", conn.sessionKey.Value))
 	} else {
 		request.SetBasicAuth(conn.Username, conn.Password)
 	}
@@ -314,9 +314,9 @@ func (conn SplunkConnection) addAuthHeader(request *http.Request) {
 
 // Login validates a token or retrieves a session key.
 // Deprecated: use Client.Authenticate.
-func (conn *SplunkConnection) Login(ctx context.Context) error {
+func (conn *connection) login(ctx context.Context) error {
 	if conn.AuthToken != "" {
-		return conn.ValidateAuth(ctx)
+		return conn.validateAuth(ctx)
 	}
 	if conn.Username == "" || conn.Password == "" {
 		return errors.New("SPLUNKUSERNAME and SPLUNKPASSWORD are required when SPLUNKTOKEN is not set")
@@ -334,20 +334,20 @@ func (conn *SplunkConnection) Login(ctx context.Context) error {
 		return fmt.Errorf("%s", response)
 	}
 
-	var key SessionKey
+	var key sessionKey
 	if err := json.Unmarshal([]byte(response), &key); err != nil {
 		return err
 	}
 	if key.Value == "" {
 		return errors.New("could not parse sessionKey from login response")
 	}
-	conn.SessionKey = key
+	conn.sessionKey = key
 	return nil
 }
 
 // ValidateAuth checks whether authentication can access the Splunk REST API.
 // Deprecated: use Client.Authenticate.
-func (conn SplunkConnection) ValidateAuth(ctx context.Context) error {
+func (conn connection) validateAuth(ctx context.Context) error {
 	data := make(url.Values)
 	data.Add("output_mode", "json")
 	_, err := conn.httpGet(ctx, fmt.Sprintf("%s/services/authentication/current-context", conn.BaseURL), &data)
@@ -358,11 +358,11 @@ func (conn SplunkConnection) ValidateAuth(ctx context.Context) error {
 }
 
 // Return URL string formatted with job sid.
-func (conn SplunkConnection) jobURL(query *SplunkQuery) string {
+func (conn connection) jobURL(query *queryState) string {
 	return fmt.Sprintf("%s/services/search/jobs/%s", conn.BaseURL, query.Job.Sid)
 }
 
-func (conn SplunkConnection) pollInterval() time.Duration {
+func (conn connection) pollInterval() time.Duration {
 	if conn.PollInterval > 0 {
 		return conn.PollInterval
 	}
@@ -370,7 +370,7 @@ func (conn SplunkConnection) pollInterval() time.Duration {
 }
 
 // Check on job status until terminal state or context deadline.
-func (conn SplunkConnection) jobStatus(ctx context.Context, query *SplunkQuery) error {
+func (conn connection) jobStatus(ctx context.Context, query *queryState) error {
 	data := make(url.Values)
 	data = conn.namespaceValues(data)
 	data.Add("output_mode", "json")
@@ -430,7 +430,7 @@ type jobStatusContent struct {
 }
 
 func parseJobStatus(response string) (jobStatusContent, error) {
-	var payload SplunkJobStatus
+	var payload splunkJobStatus
 	if err := json.Unmarshal([]byte(response), &payload); err != nil {
 		return jobStatusContent{}, err
 	}
@@ -491,7 +491,7 @@ func logJobProgress(sid string, status jobStatusContent) {
 	log.Printf("INFO: Splunk search job %s state=%s %s", sid, status.DispatchState, strings.Join(details, " "))
 }
 
-func (conn SplunkConnection) cancelJob(query *SplunkQuery) error {
+func (conn connection) cancelJob(query *queryState) error {
 	ctx, cancel := context.WithTimeout(context.Background(), cancelTimeout)
 	defer cancel()
 
@@ -502,10 +502,10 @@ func (conn SplunkConnection) cancelJob(query *SplunkQuery) error {
 	return err
 }
 
-// DefaultDispatchOptions returns legacy job-mode defaults.
+// defaultdispatchOptions returns legacy job-mode defaults.
 // Deprecated: use SearchOptions.
-func DefaultDispatchOptions(outputFile string) DispatchOptions {
-	return DispatchOptions{
+func defaultdispatchOptions(outputFile string) dispatchOptions {
+	return dispatchOptions{
 		OutputFile:         outputFile,
 		ResultEndpointMode: ResultEndpointAuto,
 		ExecutionMode:      ExecutionModeJob,
@@ -513,7 +513,7 @@ func DefaultDispatchOptions(outputFile string) DispatchOptions {
 	}
 }
 
-func (options DispatchOptions) normalized() DispatchOptions {
+func (options dispatchOptions) normalized() dispatchOptions {
 	if options.SearchLogMode == "" {
 		options.SearchLogMode = SearchLogModeSummary
 	}
@@ -544,7 +544,7 @@ func addParams(values url.Values, params map[string][]string) url.Values {
 
 // Write results bytes to file as unmodified JSON.
 // Something else like python etc can be used on the saved API response.
-func (conn SplunkConnection) writeResults(query *SplunkQuery, outputfile string) error {
+func (conn connection) writeResults(query *queryState, outputfile string) error {
 	return os.WriteFile(outputfile, query.Results, 0644)
 }
 
@@ -556,14 +556,14 @@ func canFallbackResultEndpoint(err error) bool {
 	return statusErr.StatusCode == http.StatusNotFound || statusErr.StatusCode == http.StatusMethodNotAllowed || statusErr.StatusCode == http.StatusBadRequest
 }
 
-func (conn SplunkConnection) jobResultsURL(query *SplunkQuery, mode ResultEndpointMode) string {
+func (conn connection) jobResultsURL(query *queryState, mode ResultEndpointMode) string {
 	if mode == ResultEndpointV2 {
 		return fmt.Sprintf("%s/services/search/v2/jobs/%s/results", conn.BaseURL, query.Job.Sid)
 	}
 	return fmt.Sprintf("%s/results/", conn.jobURL(query))
 }
 
-func (conn SplunkConnection) exportURL(mode ResultEndpointMode) string {
+func (conn connection) exportURL(mode ResultEndpointMode) string {
 	if mode == ResultEndpointV2 {
 		return fmt.Sprintf("%s/services/search/v2/jobs/export", conn.BaseURL)
 	}
@@ -571,7 +571,7 @@ func (conn SplunkConnection) exportURL(mode ResultEndpointMode) string {
 }
 
 // Fetch job results.
-func (conn SplunkConnection) jobResults(ctx context.Context, query *SplunkQuery, options DispatchOptions) error {
+func (conn connection) jobResults(ctx context.Context, query *queryState, options dispatchOptions) error {
 	data := make(url.Values)
 	data = conn.namespaceValues(data)
 	data = addParams(data, options.ResultParams)
@@ -604,7 +604,7 @@ func (conn SplunkConnection) jobResults(ctx context.Context, query *SplunkQuery,
 	return nil
 }
 
-func (conn SplunkConnection) jobResultsToWriter(ctx context.Context, query *SplunkQuery, options DispatchOptions, output io.Writer) error {
+func (conn connection) jobResultsToWriter(ctx context.Context, query *queryState, options dispatchOptions, output io.Writer) error {
 	data := make(url.Values)
 	data = conn.namespaceValues(data)
 	data = addParams(data, options.ResultParams)
@@ -627,7 +627,7 @@ func (conn SplunkConnection) jobResultsToWriter(ctx context.Context, query *Splu
 	return conn.httpCallToWriter(ctx, conn.jobResultsURL(query, mode), http.MethodGet, &data, output)
 }
 
-func (conn SplunkConnection) exportQuery(ctx context.Context, query *SplunkQuery, options DispatchOptions, output io.Writer) error {
+func (conn connection) exportQuery(ctx context.Context, query *queryState, options dispatchOptions, output io.Writer) error {
 	data := make(url.Values)
 	data = conn.namespaceValues(data)
 	data = addParams(data, options.DispatchParams)
@@ -661,7 +661,7 @@ func (conn SplunkConnection) exportQuery(ctx context.Context, query *SplunkQuery
 	return nil
 }
 
-func (conn SplunkConnection) jobSearchLog(ctx context.Context, query *SplunkQuery) (string, error) {
+func (conn connection) jobSearchLog(ctx context.Context, query *queryState) (string, error) {
 	if query.Job.Sid == "" {
 		return "", errors.New("cannot fetch search log without job sid")
 	}
@@ -748,7 +748,7 @@ func derivedSearchLogFile(outputFile string) string {
 	return strings.TrimSuffix(outputFile, ext) + ".search.log"
 }
 
-func (conn SplunkConnection) collectJobLogDiagnostics(ctx context.Context, query *SplunkQuery, options DispatchOptions) {
+func (conn connection) collectJobLogDiagnostics(ctx context.Context, query *queryState, options dispatchOptions) {
 	if query.Job.Sid == "" {
 		return
 	}
@@ -780,19 +780,19 @@ func (conn SplunkConnection) collectJobLogDiagnostics(ctx context.Context, query
 	}
 }
 
-// DispatchQuery executes a legacy mutable query and writes its response.
+// dispatchQueryToFile executes a legacy mutable query and writes its response.
 // Deprecated: use Client.Search.
-func (conn SplunkConnection) DispatchQuery(ctx context.Context, query *SplunkQuery, outputfile string) error {
-	return conn.DispatchQueryWithOptions(ctx, query, DefaultDispatchOptions(outputfile))
+func (conn connection) dispatchQueryToFile(ctx context.Context, query *queryState, outputfile string) error {
+	return conn.dispatchQueryWithOptions(ctx, query, defaultdispatchOptions(outputfile))
 }
 
-// DispatchQueryWithOptions executes a legacy mutable query with options.
+// dispatchQueryWithOptions executes a legacy mutable query with options.
 // Deprecated: use Client.Search.
-func (conn SplunkConnection) DispatchQueryWithOptions(ctx context.Context, query *SplunkQuery, options DispatchOptions) error {
+func (conn connection) dispatchQueryWithOptions(ctx context.Context, query *queryState, options dispatchOptions) error {
 	return conn.dispatchQuery(ctx, query, options, nil)
 }
 
-func (conn SplunkConnection) dispatchQuery(ctx context.Context, query *SplunkQuery, options DispatchOptions, output io.Writer) error {
+func (conn connection) dispatchQuery(ctx context.Context, query *queryState, options dispatchOptions, output io.Writer) error {
 	options = options.normalized()
 	if options.ExecutionMode == ExecutionModeExport {
 		if output != nil {
@@ -843,7 +843,7 @@ func (conn SplunkConnection) dispatchQuery(ctx context.Context, query *SplunkQue
 	return conn.writeResults(query, options.OutputFile)
 }
 
-func (conn SplunkConnection) httpPostToFileExport(ctx context.Context, query *SplunkQuery, options DispatchOptions) error {
+func (conn connection) httpPostToFileExport(ctx context.Context, query *queryState, options dispatchOptions) error {
 	directory := filepath.Dir(options.OutputFile)
 	temporary, err := os.CreateTemp(directory, ".querysplunk-export-*")
 	if err != nil {
@@ -881,7 +881,7 @@ func (conn SplunkConnection) httpPostToFileExport(ctx context.Context, query *Sp
 	return closeTemporaryErr
 }
 
-func (conn SplunkConnection) namespaceValues(values url.Values) url.Values {
+func (conn connection) namespaceValues(values url.Values) url.Values {
 	if values == nil {
 		values = make(url.Values)
 	}

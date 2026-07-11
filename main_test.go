@@ -122,6 +122,19 @@ func TestDefaultQueryFileIsReadable(t *testing.T) {
 	}
 }
 
+func TestDerivedSearchLogFile(t *testing.T) {
+	tests := map[string]string{
+		"splunkresults.json": "splunkresults.search.log",
+		"splunkresults":      "splunkresults.search.log",
+		"":                   "splunk.search.log",
+	}
+	for input, expected := range tests {
+		if actual := derivedSearchLogFile(input); actual != expected {
+			t.Errorf("derivedSearchLogFile(%q) = %q; want %q", input, actual, expected)
+		}
+	}
+}
+
 func TestReadSearchFileRejectsEmptySearch(t *testing.T) {
 	queryFile := t.TempDir() + "/empty.spl"
 	if err := os.WriteFile(queryFile, []byte(" \n\t"), 0644); err != nil {
