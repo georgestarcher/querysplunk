@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"log/slog"
 	"os"
@@ -101,6 +102,45 @@ func loadSearchConfig(path string) (searchConfig, error) {
 	return querypkg.LoadFile(path)
 }
 
+func validateSearchConfig(path string, overrides querypkg.Overrides, output io.Writer) error {
+	config, err := querypkg.LoadFile(path)
+	if err != nil {
+		return err
+	}
+	if overrides.App == nil && strings.TrimSpace(config.App) == "" {
+		app := strings.TrimSpace(os.Getenv("SPLUNKAPP"))
+		if app != "" {
+			overrides.App = &app
+		}
+	}
+	prepared, prepareErr := querypkg.Prepare(config, overrides, querypkg.SafetyPolicy{})
+	if err := prepared.Plan().EncodeYAML(output); err != nil {
+		return err
+	}
+	return prepareErr
+}
+
+func runConfigValidation(path string, overrides querypkg.Overrides, output, errorOutput io.Writer) int {
+	if err := validateSearchConfig(path, overrides, output); err != nil {
+		_, _ = fmt.Fprintf(errorOutput, "ERROR: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+func validateConfigModes(configFile, validateConfigFile, writeConfigFile string) error {
+	modes := 0
+	for _, path := range []string{configFile, validateConfigFile, writeConfigFile} {
+		if strings.TrimSpace(path) != "" {
+			modes++
+		}
+	}
+	if modes > 1 {
+		return errors.New("-config, -validate-config, and -write-config are mutually exclusive")
+	}
+	return nil
+}
+
 func explicitFlags() map[string]bool {
 	set := make(map[string]bool)
 	flag.Visit(func(f *flag.Flag) {
@@ -162,6 +202,7 @@ Run a Splunk search from a plain SPL file or from a structured YAML config.
 
 Examples:
   querysplunk -version
+  querysplunk -validate-config search.yml
   querysplunk -q query.txt -o splunkresults.json
   querysplunk -q query.txt -earliest=-15m -latest=now
   querysplunk -config search.yml
@@ -193,6 +234,7 @@ func main() {
 	var appContext string
 	var configFile string
 	var writeConfigFile string
+	var validateConfigFile string
 	var forceWrite bool
 	var earliestTime string
 	var latestTime string
@@ -207,6 +249,7 @@ func main() {
 	flag.BoolVar(&useEnvFile, "e", false, "Load Splunk connection settings from .env")
 	flag.StringVar(&appContext, "app", "", "Override Splunk app context / namespace for the search")
 	flag.StringVar(&configFile, "config", "", "Run a structured YAML search config")
+	flag.StringVar(&validateConfigFile, "validate-config", "", "Validate a YAML search config offline and print its effective plan")
 	flag.StringVar(&writeConfigFile, "write-config", "", "Write a starter YAML search config and exit")
 	flag.StringVar(&earliestTime, "earliest", "", "Set dispatch earliest_time, such as -15m or 2026-07-10T00:00:00")
 	flag.StringVar(&latestTime, "latest", "", "Set dispatch latest_time, such as now")
@@ -222,12 +265,35 @@ func main() {
 		return
 	}
 	flagsSet := explicitFlags()
+	if err := validateConfigModes(configFile, validateConfigFile, writeConfigFile); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
+		os.Exit(2)
+	}
 
 	if writeConfigFile != "" {
 		if err := writeSkeletonConfig(writeConfigFile, forceWrite); err != nil {
 			log.Fatal(err)
 		}
 		log.Printf("SUCCESS: Wrote starter config to %s", writeConfigFile)
+		return
+	}
+	if validateConfigFile != "" {
+		overrides := querypkg.Overrides{AllowOldEarliest: allowOldEarliest, AllowIndexWildcard: allowIndexWildcard}
+		if flagsSet["app"] {
+			overrides.App = &appContext
+		}
+		if flagsSet["o"] {
+			overrides.OutputFile = &outputFile
+		}
+		if flagsSet["earliest"] {
+			overrides.EarliestTime = &earliestTime
+		}
+		if flagsSet["latest"] {
+			overrides.LatestTime = &latestTime
+		}
+		if status := runConfigValidation(validateConfigFile, overrides, os.Stdout, os.Stderr); status != 0 {
+			os.Exit(status)
+		}
 		return
 	}
 

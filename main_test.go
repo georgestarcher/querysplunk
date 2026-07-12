@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"net/http"
@@ -14,6 +15,102 @@ import (
 	querypkg "github.com/georgestarcher/querysplunk/v2/query"
 	"github.com/georgestarcher/querysplunk/v2/splunk"
 )
+
+func TestValidateSearchConfigOffline(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "search.yml")
+	if err := os.WriteFile(path, []byte("search: search index=_internal earliest=-15m\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SPLUNKBASEURL", "")
+	t.Setenv("SPLUNKTOKEN", "")
+	t.Setenv("SPLUNKAPP", "")
+	var output bytes.Buffer
+	if err := validateSearchConfig(path, querypkg.Overrides{}, &output); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output.String(), "valid: true") || !strings.Contains(output.String(), "mode: job") {
+		t.Fatalf("unexpected validation output:\n%s", output.String())
+	}
+}
+
+func TestValidateSearchConfigUsesEffectiveAppPrecedence(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "search.yml")
+	if err := os.WriteFile(path, []byte("search: search index=_internal earliest=-15m\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SPLUNKAPP", "environment-app")
+	var environmentPlan bytes.Buffer
+	if err := validateSearchConfig(path, querypkg.Overrides{}, &environmentPlan); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(environmentPlan.String(), "app: environment-app") {
+		t.Fatalf("SPLUNKAPP missing from effective plan:\n%s", environmentPlan.String())
+	}
+
+	explicitApp := "flag-app"
+	var explicitPlan bytes.Buffer
+	if err := validateSearchConfig(path, querypkg.Overrides{App: &explicitApp}, &explicitPlan); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(explicitPlan.String(), "app: flag-app") || strings.Contains(explicitPlan.String(), "environment-app") {
+		t.Fatalf("explicit app did not take precedence:\n%s", explicitPlan.String())
+	}
+}
+
+func TestValidateSearchConfigPrintsBlockingPlan(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "unsafe.yml")
+	if err := os.WriteFile(path, []byte("search: search index=* earliest=-15m\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var output bytes.Buffer
+	err := validateSearchConfig(path, querypkg.Overrides{}, &output)
+	if !errors.Is(err, querypkg.ErrSafetyViolation) || !strings.Contains(output.String(), "valid: false") || !strings.Contains(output.String(), "severity: violation") {
+		t.Fatalf("error=%v output=\n%s", err, output.String())
+	}
+}
+
+func TestRunConfigValidationSeparatesPlanAndErrors(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "unsafe.yml")
+	if err := os.WriteFile(path, []byte("search: search index=* earliest=-15m\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var output, errorOutput bytes.Buffer
+	if status := runConfigValidation(path, querypkg.Overrides{}, &output, &errorOutput); status != 1 {
+		t.Fatalf("status = %d; want 1", status)
+	}
+	if !strings.Contains(output.String(), "valid: false") || strings.Contains(output.String(), "ERROR:") {
+		t.Fatalf("standard output is not a clean plan:\n%s", output.String())
+	}
+	if !strings.Contains(errorOutput.String(), "ERROR: query safety violation") {
+		t.Fatalf("standard error missing validation failure: %q", errorOutput.String())
+	}
+}
+
+func TestValidateConfigModes(t *testing.T) {
+	valid := [][3]string{
+		{},
+		{"search.yml", "", ""},
+		{"", "search.yml", ""},
+		{"", "", "search.yml"},
+	}
+	for _, modes := range valid {
+		if err := validateConfigModes(modes[0], modes[1], modes[2]); err != nil {
+			t.Fatalf("validateConfigModes%q returned %v", modes, err)
+		}
+	}
+
+	conflicts := [][3]string{
+		{"run.yml", "validate.yml", ""},
+		{"", "validate.yml", "write.yml"},
+		{"run.yml", "", "write.yml"},
+		{"run.yml", "validate.yml", "write.yml"},
+	}
+	for _, modes := range conflicts {
+		if err := validateConfigModes(modes[0], modes[1], modes[2]); err == nil {
+			t.Fatalf("validateConfigModes%q accepted conflicting modes", modes)
+		}
+	}
+}
 
 func TestVersionStringDevelopmentDefaults(t *testing.T) {
 	if got, want := versionString(), "querysplunk version=dev commit=unknown"; got != want {

@@ -131,6 +131,68 @@ func TestSafetyFindingsAndAcknowledgements(t *testing.T) {
 	}
 }
 
+func TestPlanUsesEffectiveConfigAndDeterministicYAML(t *testing.T) {
+	app, output, earliest, latest := "security", "override.json", "-30m", "now"
+	prepared, err := query.Prepare(
+		query.Config{Search: "search index=* earliest=-2y", Diagnostics: query.Diagnostics{SearchLog: "save"}},
+		query.Overrides{App: &app, OutputFile: &output, EarliestTime: &earliest, LatestTime: &latest, AllowOldEarliest: true, AllowIndexWildcard: true},
+		query.SafetyPolicy{},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan := prepared.Plan()
+	if !plan.Valid || plan.Config.App != app || plan.Config.OutputFile != output || plan.Config.Mode != "job" || plan.Config.Results.Endpoint != "auto" {
+		t.Fatalf("unexpected effective plan: %#v", plan)
+	}
+	if plan.Config.Dispatch.EarliestTime != earliest || plan.Config.Dispatch.LatestTime != latest || plan.Config.Diagnostics.SearchLogFile != "override.search.log" {
+		t.Fatalf("derived settings missing from plan: %#v", plan.Config)
+	}
+	if !plan.Config.Safety.AllowOldEarliest || !plan.Config.Safety.AllowIndexWildcard || len(plan.Findings) != 2 {
+		t.Fatalf("safety acknowledgements missing from plan: %#v", plan)
+	}
+	for _, finding := range plan.Findings {
+		if finding.Severity != query.SeverityAcknowledged {
+			t.Fatalf("finding was not acknowledged: %#v", finding)
+		}
+	}
+
+	var first, second bytes.Buffer
+	if err := plan.EncodeYAML(&first); err != nil {
+		t.Fatal(err)
+	}
+	if err := plan.EncodeYAML(&second); err != nil {
+		t.Fatal(err)
+	}
+	if first.String() != second.String() || !strings.Contains(first.String(), "valid: true") {
+		t.Fatalf("plan YAML is not deterministic:\n%s\n%s", first.String(), second.String())
+	}
+}
+
+func TestPlanPreservesBlockingFindings(t *testing.T) {
+	prepared, err := query.Prepare(query.Config{Search: "search index=* earliest=-5m"}, query.Overrides{}, query.SafetyPolicy{})
+	if !errors.Is(err, query.ErrSafetyViolation) {
+		t.Fatalf("error = %v; want safety violation", err)
+	}
+	plan := prepared.Plan()
+	if plan.Valid || len(plan.Findings) != 1 || plan.Findings[0].Severity != query.SeverityViolation {
+		t.Fatalf("unexpected blocking plan: %#v", plan)
+	}
+	if err := plan.EncodeYAML(nil); !errors.Is(err, query.ErrInvalidConfig) {
+		t.Fatalf("nil writer error = %v; want ErrInvalidConfig", err)
+	}
+	if err := plan.EncodeYAML(failingWriter{}); err == nil {
+		t.Fatal("expected plan writer error")
+	}
+	if (query.Prepared{}).Plan().Valid {
+		t.Fatal("zero-value Prepared must not produce a valid plan")
+	}
+	warningOnly, err := query.Prepare(query.Config{Search: "| makeresults"}, query.Overrides{}, query.SafetyPolicy{})
+	if err != nil || !warningOnly.Plan().Valid || len(warningOnly.Plan().Findings) != 1 || warningOnly.Plan().Findings[0].Severity != query.SeverityWarning {
+		t.Fatalf("warning-only plan = %#v, error = %v", warningOnly.Plan(), err)
+	}
+}
+
 func TestPreparedExecutionStreamingDiagnosticsAndAtomicReplacement(t *testing.T) {
 	server := queryServer(t)
 	client, err := splunk.NewClient(splunk.Config{BaseURL: server.URL, Token: "token", HTTPClient: server.Client(), PollInterval: time.Millisecond})

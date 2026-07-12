@@ -6,6 +6,17 @@ Use `-write-config` to generate the current skeleton instead of inventing YAML f
 querysplunk -write-config search.yml
 ```
 
+Validate a generated or edited config before live execution:
+
+```bash
+querysplunk -validate-config search.yml
+```
+
+Validation is offline and prints the effective config plus structured safety
+findings. It does not load credentials or prove that Splunk will authorize or
+execute the search. An exported `SPLUNKAPP` is used only when YAML omits `app`;
+an explicit `-app` override takes precedence.
+
 Important fields:
 
 - `app`: Splunk app namespace.

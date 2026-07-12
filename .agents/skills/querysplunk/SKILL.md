@@ -40,6 +40,12 @@ Run a YAML config:
 querysplunk -config search.yml
 ```
 
+Validate a YAML config offline before execution:
+
+```bash
+querysplunk -validate-config search.yml
+```
+
 Run a plain SPL file:
 
 ```bash
@@ -63,14 +69,16 @@ querysplunk -config examples/health/splunkd-health.yml
 1. Check that the YAML file exists.
 2. Read the YAML enough to identify `search`, `output_file`, `mode`, `safety`, dispatch bounds, and diagnostics settings.
 3. Confirm there are no obvious secrets in the YAML.
-4. Warn if the search appears unbounded.
-5. Run `querysplunk -config <file>`.
-6. Read the configured `output_file` and summarize the result count and important fields.
-7. If `diagnostics.search_log` is `summary`, `save`, or `both`, surface warnings and errors reported by querysplunk.
-8. If `mode: export`, do not expect a search job ID or `search.log` diagnostics.
+4. Run `querysplunk -validate-config <file>` and inspect the effective config and structured findings.
+5. Resolve validation errors or ask the user to authorize any required safety acknowledgement.
+6. Run `querysplunk -config <file>` only after validation succeeds.
+7. Read the configured `output_file` and summarize the result count and important fields.
+8. If `diagnostics.search_log` is `summary`, `save`, or `both`, surface warnings and errors reported by querysplunk.
+9. If `mode: export`, do not expect a search job ID or `search.log` diagnostics.
 
 For embedded Go workflows, use `query.LoadFile`, apply explicit
-`query.Overrides`, call `query.Prepare`, inspect typed findings, and then call
+`query.Overrides`, call `query.Prepare`, inspect `Prepared.Plan` or typed
+findings, and then call
 `Prepared.Search`, `Prepared.SearchTo`, or `Prepared.SearchToFile`. Apply every
 override before preparation so post-merge safety analysis cannot be bypassed.
 
