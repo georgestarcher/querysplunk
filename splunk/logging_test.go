@@ -34,7 +34,11 @@ func TestClientDefaultLoggerIsQuiet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer client.Close()
+	t.Cleanup(func() {
+		if err := client.Close(); err != nil {
+			t.Errorf("close Splunk client: %v", err)
+		}
+	})
 
 	_, err = client.Search(context.Background(), "search index=private earliest=-5m secret-spl", splunk.SearchOptions{SearchLog: splunk.SearchLogModeSummary})
 	if err != nil {
@@ -58,7 +62,11 @@ func TestClientStructuredLoggerIsSafeAndBounded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer client.Close()
+	t.Cleanup(func() {
+		if err := client.Close(); err != nil {
+			t.Errorf("close Splunk client: %v", err)
+		}
+	})
 
 	result, err := client.Search(context.Background(), "search index=private earliest=-5m secret-spl", splunk.SearchOptions{SearchLog: splunk.SearchLogModeSummary})
 	if err != nil {
@@ -96,7 +104,11 @@ func TestClientLoggerLevelAndConcurrentSearches(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer client.Close()
+	t.Cleanup(func() {
+		if err := client.Close(); err != nil {
+			t.Errorf("close Splunk client: %v", err)
+		}
+	})
 
 	const searches = 8
 	var group sync.WaitGroup

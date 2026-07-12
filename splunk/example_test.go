@@ -21,7 +21,9 @@ func ExampleClient() {
 	if errors.Is(err, splunk.ErrInvalidConfig) || err != nil {
 		return
 	}
-	defer client.Close()
+	defer func() {
+		_ = client.Close()
+	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
@@ -57,7 +59,9 @@ func ExampleClient_InspectJob() {
 	if err != nil {
 		return
 	}
-	defer client.Close()
+	defer func() {
+		_ = client.Close()
+	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()

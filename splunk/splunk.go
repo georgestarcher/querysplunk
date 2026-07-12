@@ -210,7 +210,9 @@ func (conn connection) httpCallToWriter(ctx context.Context, requestURL string, 
 	if err != nil {
 		return err
 	}
-	defer response.Body.Close()
+	defer func() {
+		_ = response.Body.Close()
+	}()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		body, readErr := io.ReadAll(io.LimitReader(response.Body, maxErrorBodyBytes+1))
 		if readErr != nil {
@@ -262,7 +264,9 @@ func (conn connection) httpCall(ctx context.Context, requestURL string, method s
 	if err != nil {
 		return "", err
 	}
-	defer response.Body.Close()
+	defer func() {
+		_ = response.Body.Close()
+	}()
 
 	body, readErr := io.ReadAll(response.Body)
 	if readErr != nil {
@@ -881,7 +885,9 @@ func (conn connection) httpPostToFileExport(ctx context.Context, query *querySta
 		return err
 	}
 	temporaryPath := temporary.Name()
-	defer os.Remove(temporaryPath)
+	defer func() {
+		_ = os.Remove(temporaryPath)
+	}()
 	if err := temporary.Chmod(0600); err != nil {
 		_ = temporary.Close()
 		return err

@@ -290,7 +290,11 @@ func TestRunSearchToFileReplacesOnlyAfterSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer client.Close()
+	t.Cleanup(func() {
+		if err := client.Close(); err != nil {
+			t.Errorf("close Splunk client: %v", err)
+		}
+	})
 
 	output := filepath.Join(t.TempDir(), "results.json")
 	if err := os.WriteFile(output, []byte("stale"), 0600); err != nil {

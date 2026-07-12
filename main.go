@@ -363,7 +363,9 @@ func main() {
 			reportCLIError(os.Stderr, jsonEventOutput, "configure", err)
 			os.Exit(1)
 		}
-		defer client.Close()
+		defer func() {
+			_ = client.Close()
+		}()
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 		if err := runJobAction(ctx, client, jobOptions, os.Stdout); err != nil {
@@ -445,7 +447,9 @@ func main() {
 		reportCLIError(os.Stderr, jsonEventOutput, "configure", err)
 		os.Exit(1)
 	}
-	defer client.Close()
+	defer func() {
+		_ = client.Close()
+	}()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
