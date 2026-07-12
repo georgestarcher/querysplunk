@@ -5,9 +5,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"flag"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
 	"testing"
 	"time"
 
@@ -64,4 +68,42 @@ func TestJSONEventsDoNotContaminateRawJobOutput(t *testing.T) {
 	if events.Len() == 0 || bytes.Contains(rawOutput.Bytes(), []byte(`"kind"`)) {
 		t.Fatalf("events=%q raw=%q", events.String(), rawOutput.String())
 	}
+}
+
+func TestJSONEventsCoverEarlyCLIValidationErrors(t *testing.T) {
+	command := exec.Command(os.Args[0], "-test.run=^TestJSONEventsCLIValidationHelper$")
+	command.Env = append(os.Environ(), "QUERYSPLUNK_CLI_VALIDATION_HELPER=1")
+	var stderr bytes.Buffer
+	command.Stderr = &stderr
+	err := command.Run()
+	var exitError *exec.ExitError
+	if !errors.As(err, &exitError) || exitError.ExitCode() != 2 {
+		t.Fatalf("exit error = %v, stderr = %q", err, stderr.String())
+	}
+
+	scanner := bufio.NewScanner(&stderr)
+	lineCount := 0
+	for scanner.Scan() {
+		lineCount++
+		var event splunk.RuntimeEvent
+		if err := json.Unmarshal(scanner.Bytes(), &event); err != nil {
+			t.Fatalf("stderr line %d is not JSON: %v; output=%q", lineCount, err, stderr.String())
+		}
+		if event.Kind != splunk.EventOperation || event.Operation != "arguments" || event.Outcome != "failure" {
+			t.Fatalf("unexpected event: %+v", event)
+		}
+	}
+	if err := scanner.Err(); err != nil || lineCount != 1 {
+		t.Fatalf("lines=%d error=%v output=%q", lineCount, err, stderr.String())
+	}
+}
+
+func TestJSONEventsCLIValidationHelper(t *testing.T) {
+	if os.Getenv("QUERYSPLUNK_CLI_VALIDATION_HELPER") != "1" {
+		return
+	}
+	flag.CommandLine = flag.NewFlagSet("querysplunk", flag.ContinueOnError)
+	flag.CommandLine.SetOutput(io.Discard)
+	os.Args = []string{"querysplunk", "-json-events", "-job-sid", "safe-job"}
+	main()
 }

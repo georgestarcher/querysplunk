@@ -302,15 +302,23 @@ func main() {
 		fmt.Println(versionString())
 		return
 	}
+	var eventSink splunk.EventSink
+	var jsonEventOutput *jsonEventSink
+	if jsonEvents {
+		jsonEventOutput = newJSONEventSink(os.Stderr)
+		eventSink = jsonEventOutput
+		log.SetOutput(io.Discard)
+	}
+
 	flagsSet := explicitFlags()
 	jobOptions := jobCLIOptions{Action: jobAction, JobID: jobID, OutputFile: outputFile, OutputExplicit: flagsSet["o"]}
 	jobMode, err := validateJobMode(jobOptions, flagsSet, configFile, validateConfigFile, writeConfigFile)
 	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
+		reportCLIError(os.Stderr, jsonEventOutput, "arguments", err)
 		os.Exit(2)
 	}
 	if err := validateConfigModes(configFile, validateConfigFile, writeConfigFile); err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
+		reportCLIError(os.Stderr, jsonEventOutput, "arguments", err)
 		os.Exit(2)
 	}
 
@@ -340,14 +348,6 @@ func main() {
 		}
 		return
 	}
-	var eventSink splunk.EventSink
-	var jsonEventOutput *jsonEventSink
-	if jsonEvents {
-		jsonEventOutput = newJSONEventSink(os.Stderr)
-		eventSink = jsonEventOutput
-		log.SetOutput(io.Discard)
-	}
-
 	if useEnvFile {
 		if err := godotenv.Load(); err != nil {
 			reportCLIError(os.Stderr, jsonEventOutput, "environment", errors.New("could not load .env file"))
