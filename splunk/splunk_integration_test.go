@@ -57,6 +57,7 @@ func TestDispatchQueryIntegration(t *testing.T) {
 		timeout = time.Duration(seconds) * time.Second
 	}
 
+	eventKinds := make(map[RuntimeEventKind]int)
 	client, err := NewClient(Config{
 		App:                appContext,
 		Username:           username,
@@ -65,6 +66,9 @@ func TestDispatchQueryIntegration(t *testing.T) {
 		BaseURL:            baseURL,
 		InsecureSkipVerify: !tlsVerify,
 		Timeout:            timeout,
+		EventSink: EventSinkFunc(func(_ context.Context, event RuntimeEvent) {
+			eventKinds[event.Kind]++
+		}),
 	})
 	if err != nil {
 		t.Fatalf("create client: %v", err)
@@ -131,5 +135,10 @@ func TestDispatchQueryIntegration(t *testing.T) {
 	cancellation, err := client.CancelJob(ctx, result.JobID)
 	if err != nil || cancellation.Requested {
 		t.Fatalf("completed job cancellation should be idempotent: %+v, %v", cancellation, err)
+	}
+	for _, kind := range []RuntimeEventKind{EventJobDispatched, EventJobStatus, EventDiagnostics, EventOperation, EventCancellation} {
+		if eventKinds[kind] == 0 {
+			t.Errorf("live integration did not emit %s", kind)
+		}
 	}
 }

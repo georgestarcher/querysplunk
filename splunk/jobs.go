@@ -77,7 +77,13 @@ func (client *Client) InspectJob(ctx context.Context, jobID string) (JobStatus, 
 	if err != nil {
 		return JobStatus{}, err
 	}
-	return conn.inspectJob(ctx, jobID)
+	status, err := conn.inspectJob(ctx, jobID)
+	if err != nil {
+		conn.emitEvent(ctx, RuntimeEvent{Kind: EventOperation, Severity: EventSeverityError, Operation: "inspect", JobID: jobID, Outcome: "failure"})
+		return status, err
+	}
+	conn.emitEvent(ctx, statusEvent("inspect", status))
+	return status, nil
 }
 
 // WaitJob waits for an existing job to reach a terminal state. Cancelling the
@@ -88,7 +94,9 @@ func (client *Client) WaitJob(ctx context.Context, jobID string) (JobStatus, err
 		return status, err
 	}
 	if status.Terminal {
-		return completedJobStatus(status)
+		status, err = completedJobStatus(status)
+		client.emitRuntime(ctx, operationEvent("wait", status.JobID, status.State, err))
+		return status, err
 	}
 
 	client.mu.Lock()
@@ -99,16 +107,20 @@ func (client *Client) WaitJob(ctx context.Context, jobID string) (JobStatus, err
 	for {
 		select {
 		case <-ctx.Done():
+			client.emitRuntime(ctx, RuntimeEvent{Kind: EventOperation, Severity: EventSeverityWarning, Operation: "wait", JobID: jobID, State: status.State, Outcome: "cancelled"})
 			return status, ctx.Err()
 		case <-ticker.C:
 		}
 		nextStatus, err := client.InspectJob(ctx, jobID)
 		if err != nil {
+			client.emitRuntime(ctx, operationEvent("wait", jobID, status.State, err))
 			return status, err
 		}
 		status = nextStatus
 		if status.Terminal {
-			return completedJobStatus(status)
+			status, err = completedJobStatus(status)
+			client.emitRuntime(ctx, operationEvent("wait", jobID, status.State, err))
+			return status, err
 		}
 	}
 }
@@ -142,9 +154,11 @@ func (client *Client) JobResultsTo(ctx context.Context, jobID string, options Jo
 	query := queryState{Job: splunkJob{Sid: jobID}}
 	dispatch := dispatchOptions{ResultParams: cloneParams(options.Params), ResultEndpointMode: options.Endpoint}.normalized()
 	if err := conn.jobResultsToWriter(ctx, &query, dispatch, output); err != nil {
+		conn.emitEvent(ctx, RuntimeEvent{Kind: EventOperation, Severity: EventSeverityError, Operation: "results", JobID: jobID, Outcome: "failure"})
 		return resultFromQuery(query, nil), err
 	}
 	query.State = dispatchStateDone
+	conn.emitEvent(ctx, RuntimeEvent{Kind: EventOperation, Severity: EventSeverityInfo, Operation: "results", JobID: jobID, State: query.State, Outcome: "success"})
 	return resultFromQuery(query, nil), nil
 }
 
@@ -166,6 +180,9 @@ func (client *Client) JobResultsToFile(ctx context.Context, jobID string, option
 		result, err = client.JobResultsTo(ctx, jobID, options, output)
 		return err
 	})
+	if err == nil {
+		client.emitRuntime(ctx, RuntimeEvent{Kind: EventOutputSaved, Severity: EventSeverityInfo, Operation: "results", JobID: jobID, OutputFile: path, Outcome: "success"})
+	}
 	return result, err
 }
 
@@ -181,9 +198,20 @@ func (client *Client) JobSearchLog(ctx context.Context, jobID string) (JobLog, e
 	query := queryState{Job: splunkJob{Sid: jobID}}
 	text, err := conn.jobSearchLog(ctx, &query)
 	if err != nil {
+		conn.emitEvent(ctx, RuntimeEvent{Kind: EventOperation, Severity: EventSeverityError, Operation: "search_log", JobID: jobID, Outcome: "failure"})
 		return JobLog{JobID: jobID}, err
 	}
-	return JobLog{JobID: jobID, Text: text, Diagnostics: AnalyzeJobLog(text)}, nil
+	diagnostics := AnalyzeJobLog(text)
+	severity := EventSeverityInfo
+	if len(diagnostics.Warnings) > 0 {
+		severity = EventSeverityWarning
+	}
+	if len(diagnostics.Errors) > 0 {
+		severity = EventSeverityError
+	}
+	conn.emitEvent(ctx, RuntimeEvent{Kind: EventDiagnostics, Severity: severity, Operation: "search_log", JobID: jobID, ExecutionDuration: diagnostics.ExecutionDuration, WarningCount: len(diagnostics.Warnings), ErrorCount: len(diagnostics.Errors)})
+	conn.emitEvent(ctx, RuntimeEvent{Kind: EventOperation, Severity: EventSeverityInfo, Operation: "search_log", JobID: jobID, Outcome: "success"})
+	return JobLog{JobID: jobID, Text: text, Diagnostics: diagnostics}, nil
 }
 
 // JobSearchLogToFile atomically writes an unmodified search.log response.
@@ -202,6 +230,9 @@ func (client *Client) JobSearchLogToFile(ctx context.Context, jobID, path string
 		_, err := io.WriteString(output, jobLog.Text)
 		return err
 	})
+	if err == nil {
+		client.emitRuntime(ctx, RuntimeEvent{Kind: EventOutputSaved, Severity: EventSeverityInfo, Operation: "search_log", JobID: jobID, OutputFile: path, Outcome: "success"})
+	}
 	return jobLog, err
 }
 
@@ -214,6 +245,7 @@ func (client *Client) CancelJob(ctx context.Context, jobID string) (JobCancellat
 	}
 	result := JobCancellation{Job: status}
 	if status.Terminal {
+		client.emitRuntime(ctx, RuntimeEvent{Kind: EventCancellation, Severity: EventSeverityInfo, Operation: "cancel", JobID: jobID, State: status.State, Outcome: "already_terminal"})
 		return result, nil
 	}
 	client.mu.Lock()
@@ -224,12 +256,37 @@ func (client *Client) CancelJob(ctx context.Context, jobID string) (JobCancellat
 		latest, inspectErr := client.InspectJob(ctx, jobID)
 		if inspectErr == nil && latest.Terminal {
 			result.Job = latest
+			conn.emitEvent(ctx, RuntimeEvent{Kind: EventCancellation, Severity: EventSeverityInfo, Operation: "cancel", JobID: jobID, State: latest.State, Outcome: "already_terminal"})
 			return result, nil
 		}
+		conn.emitEvent(ctx, RuntimeEvent{Kind: EventCancellation, Severity: EventSeverityError, Operation: "cancel", JobID: jobID, State: status.State, Outcome: "failure"})
 		return result, err
 	}
 	result.Requested = true
+	conn.emitEvent(ctx, RuntimeEvent{Kind: EventCancellation, Severity: EventSeverityInfo, Operation: "cancel", JobID: jobID, State: status.State, CancelRequested: true, Outcome: "requested"})
 	return result, nil
+}
+
+func (client *Client) emitRuntime(ctx context.Context, event RuntimeEvent) {
+	if client == nil {
+		return
+	}
+	client.mu.Lock()
+	conn := client.conn
+	client.mu.Unlock()
+	conn.emitEvent(ctx, event)
+}
+
+func statusEvent(operation string, status JobStatus) RuntimeEvent {
+	return RuntimeEvent{Kind: EventJobStatus, Severity: EventSeverityInfo, Operation: operation, JobID: status.JobID, State: status.State, DoneProgress: status.DoneProgress, ScanCount: status.ScanCount, EventCount: status.EventCount, ResultCount: status.ResultCount}
+}
+
+func operationEvent(operation, jobID, state string, err error) RuntimeEvent {
+	severity, outcome := EventSeverityInfo, "success"
+	if err != nil {
+		severity, outcome = EventSeverityError, "failure"
+	}
+	return RuntimeEvent{Kind: EventOperation, Severity: severity, Operation: operation, JobID: jobID, State: state, Outcome: outcome}
 }
 
 func (client *Client) connection(ctx context.Context) (connection, error) {

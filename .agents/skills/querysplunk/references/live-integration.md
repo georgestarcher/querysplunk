@@ -29,4 +29,7 @@ inspects and waits on it, fetches results and `search.log`, and verifies that
 cancelling an already-completed job is idempotent. Active cancellation remains
 covered synthetically so live validation never cancels an unrelated job.
 
+The live package test also captures typed runtime events and verifies required
+event kinds without printing event payloads, SIDs, credentials, or URLs.
+
 In GitHub Actions, live Splunk integration is manual: run the `Go` workflow with `run_integration_tests=true`. The workflow expects secrets in the `AUTH_TOKEN` environment.

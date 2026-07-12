@@ -33,6 +33,7 @@ type connection struct {
 	PollInterval                time.Duration
 	client                      *http.Client
 	logger                      *slog.Logger
+	events                      *eventDispatcher
 }
 
 // sessionKey is a legacy decoded login response.
@@ -382,6 +383,10 @@ func (conn connection) logWarn(ctx context.Context, message string, args ...any)
 	}
 }
 
+func (conn connection) emitEvent(ctx context.Context, event RuntimeEvent) {
+	conn.events.emit(ctx, event)
+}
+
 // Check on job status until terminal state or context deadline.
 func (conn connection) jobStatus(ctx context.Context, query *queryState) error {
 	data := make(url.Values)
@@ -397,9 +402,15 @@ func (conn connection) jobStatus(ctx context.Context, query *queryState) error {
 		case <-ctx.Done():
 			query.State = "CANCELLED"
 			if query.Job.Sid != "" {
-				if err := conn.cancelJob(query); err != nil {
+				cancelErr := conn.cancelJob(query)
+				if cancelErr != nil {
 					conn.logWarn(context.Background(), "Splunk search job cancellation failed", "job_id", query.Job.Sid)
 				}
+				outcome := "requested"
+				if cancelErr != nil {
+					outcome = "failed"
+				}
+				conn.emitEvent(context.Background(), RuntimeEvent{Kind: EventCancellation, Severity: EventSeverityWarning, Operation: "search", JobID: query.Job.Sid, State: query.State, CancelRequested: cancelErr == nil, Outcome: outcome})
 			}
 			return ctx.Err()
 		case <-ticker.C:
@@ -498,6 +509,8 @@ func (conn connection) logJobProgress(ctx context.Context, sid string, status jo
 		args = append(args, "result_count", status.ResultCount)
 	}
 	conn.logInfo(ctx, "Splunk search job state changed", args...)
+	public := publicJobStatus(sid, status)
+	conn.emitEvent(ctx, RuntimeEvent{Kind: EventJobStatus, Severity: EventSeverityInfo, Operation: "search", JobID: sid, State: public.State, DoneProgress: public.DoneProgress, ScanCount: public.ScanCount, EventCount: public.EventCount, ResultCount: public.ResultCount})
 }
 
 func (conn connection) cancelJob(query *queryState) error {
@@ -596,6 +609,7 @@ func (conn connection) jobResults(ctx context.Context, query *queryState, option
 			return err
 		}
 		conn.logInfo(ctx, "Splunk search endpoint fallback", "job_id", query.Job.Sid, "operation", "results", "from_endpoint", "v2", "to_endpoint", "v1")
+		conn.emitEvent(ctx, RuntimeEvent{Kind: EventEndpointFallback, Severity: EventSeverityInfo, Operation: "results", JobID: query.Job.Sid, FromEndpoint: "v2", ToEndpoint: "v1"})
 		mode = ResultEndpointV1
 	}
 
@@ -627,6 +641,7 @@ func (conn connection) jobResultsToWriter(ctx context.Context, query *queryState
 			return err
 		}
 		conn.logInfo(ctx, "Splunk search endpoint fallback", "job_id", query.Job.Sid, "operation", "results", "from_endpoint", "v2", "to_endpoint", "v1")
+		conn.emitEvent(ctx, RuntimeEvent{Kind: EventEndpointFallback, Severity: EventSeverityInfo, Operation: "results", JobID: query.Job.Sid, FromEndpoint: "v2", ToEndpoint: "v1"})
 		mode = ResultEndpointV1
 	}
 	return conn.httpCallToWriter(ctx, conn.jobResultsURL(query, mode), http.MethodGet, &data, output)
@@ -655,6 +670,7 @@ func (conn connection) exportQuery(ctx context.Context, query *queryState, optio
 			return err
 		}
 		conn.logInfo(ctx, "Splunk search endpoint fallback", "operation", "export", "from_endpoint", "v2", "to_endpoint", "v1")
+		conn.emitEvent(ctx, RuntimeEvent{Kind: EventEndpointFallback, Severity: EventSeverityInfo, Operation: "export", FromEndpoint: "v2", ToEndpoint: "v1"})
 		mode = ResultEndpointV1
 	}
 
@@ -768,6 +784,14 @@ func (conn connection) collectJobLogDiagnostics(ctx context.Context, query *quer
 	}
 	query.SearchLogRead = true
 	query.LogDiagnostics = AnalyzeJobLog(searchLog)
+	severity := EventSeverityInfo
+	if len(query.LogDiagnostics.Warnings) > 0 {
+		severity = EventSeverityWarning
+	}
+	if len(query.LogDiagnostics.Errors) > 0 {
+		severity = EventSeverityError
+	}
+	conn.emitEvent(ctx, RuntimeEvent{Kind: EventDiagnostics, Severity: severity, Operation: "search_log", JobID: query.Job.Sid, ExecutionDuration: query.LogDiagnostics.ExecutionDuration, WarningCount: len(query.LogDiagnostics.Warnings), ErrorCount: len(query.LogDiagnostics.Errors)})
 	if shouldSummarizeSearchLog(options.SearchLogMode) {
 		conn.logDiagnostics(ctx, query.Job.Sid, query.LogDiagnostics)
 	}
@@ -782,6 +806,7 @@ func (conn connection) collectJobLogDiagnostics(ctx context.Context, query *quer
 		}
 		query.SearchLogFile = searchLogFile
 		conn.logInfo(ctx, "Splunk search log saved", "job_id", query.Job.Sid)
+		conn.emitEvent(ctx, RuntimeEvent{Kind: EventOutputSaved, Severity: EventSeverityInfo, Operation: "search_log", JobID: query.Job.Sid, OutputFile: searchLogFile, Outcome: "success"})
 	}
 }
 
@@ -826,6 +851,7 @@ func (conn connection) dispatchQuery(ctx context.Context, query *queryState, opt
 		return fmt.Errorf("empty job sid in response")
 	}
 	conn.logInfo(ctx, "Splunk search job dispatched", "job_id", query.Job.Sid)
+	conn.emitEvent(ctx, RuntimeEvent{Kind: EventJobDispatched, Severity: EventSeverityInfo, Operation: "search", JobID: query.Job.Sid, State: "DISPATCHED"})
 
 	if err = conn.jobStatus(ctx, query); err != nil {
 		diagnosticCtx, cancel := context.WithTimeout(context.Background(), cancelTimeout)
