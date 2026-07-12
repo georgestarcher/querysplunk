@@ -35,6 +35,9 @@ jobs:
           scripts/test-install.sh
           pwsh -NoProfile -File scripts/test-install.ps1
 
+      - name: Test documentation, help, examples, and skill
+        run: scripts/test-docs.sh
+
       - name: Build release assets
         run: |
           set -euo pipefail
@@ -58,7 +61,7 @@ jobs:
         run: scripts/verify-package-contents.sh dist "${RELEASE_VERSION}"
 
       - name: Upload release assets
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-assets
           path: dist/*

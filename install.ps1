@@ -9,12 +9,16 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$DefaultHome = $HOME
 
 if ([string]::IsNullOrWhiteSpace($HomeDir)) {
     throw "HOME is not set; use -HomeDir"
 }
 if ([string]::IsNullOrWhiteSpace($BinDir)) {
-    $BinDir = Join-Path $HomeDir ".local/bin"
+    if ([string]::IsNullOrWhiteSpace($DefaultHome)) {
+        throw "HOME is not set; use -BinDir"
+    }
+    $BinDir = Join-Path $DefaultHome ".local/bin"
 }
 if ($AllowDowngrade -and -not $Upgrade) {
     throw "-AllowDowngrade requires -Upgrade"

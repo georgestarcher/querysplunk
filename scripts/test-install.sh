@@ -36,6 +36,13 @@ make_bundle "$bundle_v1" "v1.0.0"
 make_bundle "$bundle_v2" "v2.0.0"
 make_bundle "$bundle_malformed" "v1.0.0foo"
 
+default_profile_home="${work_dir}/default profile home"
+alternate_skill_home="${work_dir}/alternate skill home"
+HOME="$default_profile_home" "$bundle_v1/install.sh" --agent codex --home-dir "$alternate_skill_home" >/dev/null
+[ -x "$default_profile_home/.local/bin/querysplunk" ] || fail "custom home changed the default binary destination"
+[ -f "$alternate_skill_home/.codex/skills/querysplunk/SKILL.md" ] || fail "custom home did not change the skill destination"
+[ ! -e "$alternate_skill_home/.local/bin/querysplunk" ] || fail "custom home unexpectedly received the binary"
+
 blocked_bin="${work_dir}/blocked bin"
 mkdir -p "$blocked_bin"
 echo keep >"${blocked_bin}/querysplunk"

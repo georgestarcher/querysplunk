@@ -34,6 +34,22 @@ try {
     New-Bundle $BundleV2 "v2.0.0"
     New-Bundle $BundleMalformed "v1.0.0foo"
 
+    $DefaultProfileHome = Join-Path $WorkDir "default profile home"
+    $AlternateSkillHome = Join-Path $WorkDir "alternate skill home"
+    $previousHome = $env:HOME
+    $previousUserProfile = $env:USERPROFILE
+    try {
+        $env:HOME = $DefaultProfileHome
+        $env:USERPROFILE = $DefaultProfileHome
+        & pwsh -NoProfile -File (Join-Path $BundleV1 "install.ps1") -Agent codex -HomeDir $AlternateSkillHome | Out-Null
+    } finally {
+        $env:HOME = $previousHome
+        $env:USERPROFILE = $previousUserProfile
+    }
+    Assert-True (Test-Path -LiteralPath (Join-Path $DefaultProfileHome ".local/bin/querysplunk.exe")) "custom home changed the default binary destination"
+    Assert-True (Test-Path -LiteralPath (Join-Path $AlternateSkillHome ".codex/skills/querysplunk/SKILL.md")) "custom home did not change the skill destination"
+    Assert-True (-not (Test-Path -LiteralPath (Join-Path $AlternateSkillHome ".local/bin/querysplunk.exe"))) "custom home unexpectedly received the binary"
+
     $BlockedBin = Join-Path $WorkDir "blocked bin"
     New-Item -ItemType Directory -Path $BlockedBin -Force | Out-Null
     $BlockedTarget = Join-Path $BlockedBin "querysplunk.exe"
