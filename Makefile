@@ -16,7 +16,7 @@ run:
 build_and_run: build run
 
 package:
-	scripts/package-release.sh ${VERSION} ${BINARY_NAME} ${BUILD_DIR}
+	scripts/package-release.sh ${VERSION} ${BUILD_DIR}
 
 verify-package:
 	scripts/verify-package-contents.sh ${BUILD_DIR} ${VERSION}

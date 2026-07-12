@@ -149,7 +149,112 @@ The package example is compiled by `go test`. Run focused and complete checks:
 go test -race ./...
 ```
 
-## Quick setup
+## Install a release
+
+Release bundles are the easiest way to use querysplunk. They require no Go
+toolchain, repository clone, administrator access, or knowledge of assistant
+skill directories.
+
+Choose the archive that matches your computer:
+
+| Platform | Release asset |
+| --- | --- |
+| Apple Silicon Mac | `splunkquery-vX.Y.Z-darwin-arm64.tar.gz` |
+| Intel Mac | `splunkquery-vX.Y.Z-darwin-amd64.tar.gz` |
+| Linux x86-64 | `splunkquery-vX.Y.Z-linux-amd64.tar.gz` |
+| Linux ARM64 | `splunkquery-vX.Y.Z-linux-arm64.tar.gz` |
+| Windows x86-64 | `splunkquery-vX.Y.Z-windows-amd64.zip` |
+
+Download that archive and `checksums.txt` from the same GitHub Release. Verify
+the archive before extracting it; [INSTALL.md](INSTALL.md) provides exact
+commands for macOS, Linux, and Windows.
+
+### Install it yourself
+
+Extract the archive, open a terminal in the extracted directory, and run:
+
+```bash
+./install.sh
+```
+
+On Windows PowerShell:
+
+```powershell
+.\install.ps1
+```
+
+The installer places the command at `~/.local/bin/querysplunk` by default and
+installs the bundled skill for locally detected Codex and Claude Code
+installations. It prints PATH guidance when needed. It does not read, prompt
+for, copy, or configure Splunk credentials.
+
+Verify the result:
+
+```bash
+querysplunk -version
+```
+
+Use `--agent codex|claude|both|none` or PowerShell `-Agent` to select assistant
+targets explicitly. Use `./install.sh --help` for custom locations and other
+options.
+
+### Ask Codex or Claude Code to install it
+
+Open the assistant in the extracted release directory and give it this prompt:
+
+> Read INSTALL.md and .agents/skills/querysplunk/SKILL.md in this extracted
+> release. Install querysplunk for my available local assistants using the
+> bundled installer. Do not configure or display Splunk credentials. Verify the
+> installed command and skill files when finished.
+
+The agent should run the bundled installer rather than improvise file-copy or
+PATH operations.
+
+### Use it from an assistant
+
+Start a new assistant session if this is the first skill installed for that
+assistant. Invoke it directly with `$querysplunk` in Codex or `/querysplunk` in
+Claude Code, or ask naturally:
+
+> Use querysplunk to create a time-bounded saved YAML search for the last 30
+> minutes. Generate the skeleton, edit it, and validate it offline. Show me the
+> effective plan and safety findings, but do not contact Splunk until I approve.
+
+After approval, ask the agent to execute the YAML with machine-readable runtime
+events and summarize the result and bounded diagnostics. The installed skill
+instructs agents to keep credentials out of YAML and chat, preserve safety
+controls, separate events from results, resume interrupted jobs by SID, and
+require explicit authorization before cancellation.
+
+The bundled skill also includes deterministic preflight and recovery rules, SPL
+authoring guidance, bounded result analysis, health-diagnostic interpretation,
+and a non-sensitive session handoff template. These playbooks tell an agent when
+to retry, when to resume by SID, and when to stop for user correction instead of
+blindly redispatching searches.
+
+Splunk connection values remain environment configuration. See
+[Configuration environment](#configuration-environment) before the first live
+search.
+
+### Upgrade yourself or through an agent
+
+To upgrade from an extracted newer release, run `./install.sh --upgrade` or
+`.\install.ps1 -Upgrade`. Upgrades preserve saved YAML, results, environment
+files, credentials, configuration, and unrelated skills; downgrades require an
+explicit acknowledgement.
+
+Or open the assistant in the newer extracted bundle and say:
+
+> Read INSTALL.md and .agents/skills/querysplunk/SKILL.md in this extracted
+> release. Upgrade my existing querysplunk installation using the bundled
+> installer. Preserve my YAML files, credentials, configuration, results, and
+> unrelated skills. Do not downgrade unless I explicitly approve it. Verify
+> the installed version and assistant skills when finished.
+
+See [INSTALL.md](INSTALL.md) for checksum commands, custom destinations, PATH
+guidance, complete upgrade behavior, first use, and removal.
+
+## Build from source
 
 ```bash
 brew install go
@@ -634,8 +739,8 @@ workflow passes. To create a release:
 ```bash
 git checkout main
 git pull
-git tag v1.1.0
-git push origin v1.1.0
+git tag v2.1.0
+git push origin v2.1.0
 ```
 
 The `Release` workflow builds these assets and uploads them to the GitHub
@@ -649,10 +754,11 @@ release:
 - `checksums.txt`
 
 Each platform archive is a self-contained CLI bundle. It includes the
-`splunkquery` binary, this README, `examples/health/`, and
+`splunkquery` binary, the platform installer, `INSTALL.md`, this README,
+`examples/health/`, and
 `.agents/skills/querysplunk/` for local AI-assistant workflows. The `.agents`
-content is an operating runbook for assistant tooling; it is not loaded by the
-`querysplunk` binary.
+content is a portable Agent Skill for Codex and Claude Code; it is not loaded by
+the `querysplunk` binary until installed into an assistant's skill directory.
 
 Identify an installed binary without credentials or a Splunk connection:
 
@@ -670,6 +776,6 @@ manually and use a dry-run version such as `v0.0.0-dryrun`.
 For local release-style packages, run:
 
 ```bash
-make clean package VERSION=v1.1.0
-make verify-package VERSION=v1.1.0
+make clean package VERSION=v2.1.0
+make verify-package VERSION=v2.1.0
 ```

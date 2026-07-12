@@ -1,6 +1,26 @@
+---
+name: querysplunk
+description: Safely install, upgrade, prepare, validate, execute, monitor, and resume Splunk searches with querysplunk YAML files or SPL input.
+---
+
 # querysplunk local assistant skill
 
-Use this skill when a user asks a local AI assistant to run, inspect, or prepare `querysplunk` searches from SPL files or structured YAML configs.
+Use this skill when a user asks a local AI assistant to install or upgrade
+querysplunk, or to prepare, validate, run, monitor, inspect, or resume searches
+from SPL files or structured YAML configs.
+
+## Installation and upgrades
+
+When working from an extracted release bundle, read the bundled `INSTALL.md`
+and use `install.sh` on macOS/Linux or `install.ps1` on Windows. Do not recreate
+the installer by manually copying files. The installer can target Codex, Claude
+Code, both, or neither and never reads Splunk credentials.
+
+Use the installer's explicit upgrade mode for a different installed version.
+Preserve saved YAML, results, environment files, credentials, configuration,
+shell settings, and unrelated skills. Never authorize a downgrade unless the
+user explicitly requests it. Verify `querysplunk -version` and the selected
+assistant skill files after installation or upgrade.
 
 ## What querysplunk does
 
@@ -91,6 +111,9 @@ instead of dumping the complete event stream into chat.
 
 ## Workflow for user-provided YAML
 
+Before live execution, read `references/preflight-and-recovery.md`. When
+creating or materially changing SPL, also read `references/spl-authoring.md`.
+
 1. Check that the YAML file exists.
 2. Read the YAML enough to identify `search`, `output_file`, `mode`, `safety`, dispatch bounds, and diagnostics settings.
 3. Confirm there are no obvious secrets in the YAML.
@@ -100,6 +123,11 @@ instead of dumping the complete event stream into chat.
 7. Read the configured `output_file` and summarize the result count and important fields.
 8. If `diagnostics.search_log` is `summary`, `save`, or `both`, surface warnings and errors reported by querysplunk.
 9. If `mode: export`, do not expect a search job ID or `search.log` diagnostics.
+
+After results are saved, follow `references/result-analysis.md`. For bundled or
+user-maintained health checks, follow `references/health-diagnostics.md`. If a
+job may outlive the current session, record only non-sensitive state using
+`templates/handoff.yml`.
 
 For embedded Go workflows, use `query.LoadFile`, apply explicit
 `query.Overrides`, call `query.Prepare`, inspect `Prepared.Plan` or typed
@@ -144,3 +172,9 @@ querysplunk -config search.yml
 - `references/yaml-config.md`: YAML config behavior and examples.
 - `references/live-integration.md`: Optional live Splunk validation workflow.
 - `references/release.md`: Release bundle layout and verification.
+- `references/installation.md`: Release installation and safe upgrade workflow.
+- `references/preflight-and-recovery.md`: Deterministic checks, failure classification, retry limits, and SID recovery.
+- `references/spl-authoring.md`: Time-bounded SPL authoring and modifying-command safety.
+- `references/result-analysis.md`: Bounded, privacy-aware result and diagnostic summaries.
+- `references/health-diagnostics.md`: Safe selection, execution, and interpretation of health checks.
+- `templates/handoff.yml`: Non-sensitive state for continuing work in another session.

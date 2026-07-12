@@ -6,12 +6,19 @@ expected_version="${2:-}"
 
 required_common=(
   "README.md"
+  "INSTALL.md"
   "examples/health/README.md"
   "examples/health/splunkd-health.yml"
   ".agents/skills/querysplunk/SKILL.md"
   ".agents/skills/querysplunk/references/yaml-config.md"
   ".agents/skills/querysplunk/references/live-integration.md"
   ".agents/skills/querysplunk/references/release.md"
+  ".agents/skills/querysplunk/references/installation.md"
+  ".agents/skills/querysplunk/references/preflight-and-recovery.md"
+  ".agents/skills/querysplunk/references/spl-authoring.md"
+  ".agents/skills/querysplunk/references/result-analysis.md"
+  ".agents/skills/querysplunk/references/health-diagnostics.md"
+  ".agents/skills/querysplunk/templates/handoff.yml"
 )
 
 example_output_files=()
@@ -47,12 +54,22 @@ check_listing() {
   local archive="$1"
   local listing="$2"
   local binary_pattern="$3"
+  local installer="$4"
 
   grep -Eq "^[^/]+/${binary_pattern}$" <<<"${listing}" || fail "${archive} is missing binary matching ${binary_pattern}"
+  grep -Eq "^[^/]+/${installer}$" <<<"${listing}" || fail "${archive} is missing ${installer}"
   for required in "${required_common[@]}"; do
     grep -Eq "^[^/]+/${required}$" <<<"${listing}" || fail "${archive} is missing ${required}"
   done
   check_forbidden_names "${archive}" "${listing}"
+}
+
+check_skill_frontmatter() {
+  local archive="$1"
+  local root="$2"
+  local skill_file="${root}/.agents/skills/querysplunk/SKILL.md"
+  grep -Eq '^name:[[:space:]]+querysplunk[[:space:]]*$' "${skill_file}" || fail "${archive} has invalid skill name frontmatter"
+  grep -Eq '^description:[[:space:]]+[^[:space:]].*$' "${skill_file}" || fail "${archive} has invalid skill description frontmatter"
 }
 
 shopt -s nullglob
@@ -73,15 +90,21 @@ if [ -n "${expected_version}" ]; then
     verify_dir="$(mktemp -d)"
     trap 'rm -rf "${verify_dir}"' EXIT
     tar -xzf "${host_archive}" -C "${verify_dir}"
-    host_binary="$(find "${verify_dir}" -type f -name splunkquery -print -quit)"
+    host_root="$(find "${verify_dir}" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+    host_binary="$(find "${host_root}" -type f -name splunkquery -print -quit)"
     [ -n "${host_binary}" ] || fail "${host_archive} does not contain splunkquery"
-    actual_version="$("${host_binary}" -version)"
+    install_home="${verify_dir}/install home"
+    install_bin="${verify_dir}/install bin"
+    HOME="${install_home}" "${host_root}/install.sh" --agent both --home-dir "${install_home}" --bin-dir "${install_bin}" >/dev/null
+    actual_version="$("${install_bin}/querysplunk" -version)"
     expected_commit="$(git rev-parse --short=12 HEAD 2>/dev/null || true)"
     expected_commit="${expected_commit:-unknown}"
     expected_output="querysplunk version=${expected_version} commit=${expected_commit}"
     if [ "${actual_version}" != "${expected_output}" ]; then
       fail "${host_archive} version output was '${actual_version}'; expected '${expected_output}'"
     fi
+    [ -f "${install_home}/.codex/skills/querysplunk/SKILL.md" ] || fail "host installer did not install the Codex skill"
+    [ -f "${install_home}/.claude/skills/querysplunk/SKILL.md" ] || fail "host installer did not install the Claude skill"
     echo "verified ${host_archive} reports ${actual_version}"
   else
     echo "skipped executable version check for unsupported host $(uname -s)-$(uname -m)"
@@ -92,12 +115,22 @@ for archive in "${archives[@]}"; do
   case "${archive}" in
     *.tar.gz)
       listing="$(tar -tzf "${archive}")"
-      check_listing "${archive}" "${listing}" "splunkquery"
+      check_listing "${archive}" "${listing}" "splunkquery" "install\\.sh"
+      content_dir="$(mktemp -d)"
+      tar -xzf "${archive}" -C "${content_dir}"
+      content_root="$(find "${content_dir}" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+      check_skill_frontmatter "${archive}" "${content_root}"
+      rm -rf "${content_dir}"
       ;;
     *.zip)
       command -v zipinfo >/dev/null 2>&1 || fail "zipinfo is required to verify ${archive}"
       listing="$(zipinfo -1 "${archive}")"
-      check_listing "${archive}" "${listing}" "splunkquery\.exe"
+      check_listing "${archive}" "${listing}" "splunkquery\.exe" "install\\.ps1"
+      content_dir="$(mktemp -d)"
+      unzip -q "${archive}" -d "${content_dir}"
+      content_root="$(find "${content_dir}" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+      check_skill_frontmatter "${archive}" "${content_root}"
+      rm -rf "${content_dir}"
       ;;
     *)
       fail "unsupported archive ${archive}"
