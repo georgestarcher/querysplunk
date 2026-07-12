@@ -105,4 +105,31 @@ func TestDispatchQueryIntegration(t *testing.T) {
 	for _, diagnosticError := range result.Diagnostics.Errors {
 		t.Logf("search.log error: %s", diagnosticError)
 	}
+
+	status, err := client.InspectJob(ctx, result.JobID)
+	if err != nil {
+		t.Fatalf("inspect existing job: %v", err)
+	}
+	if !status.Terminal || !status.Successful || status.State != dispatchStateDone {
+		t.Fatalf("unexpected resumed job status: %+v", status)
+	}
+	waited, err := client.WaitJob(ctx, result.JobID)
+	if err != nil || waited.State != dispatchStateDone {
+		t.Fatalf("wait existing job: %+v, %v", waited, err)
+	}
+	var resumedOutput bytes.Buffer
+	if _, err := client.JobResultsTo(ctx, result.JobID, JobResultsOptions{}, &resumedOutput); err != nil {
+		t.Fatalf("fetch existing job results: %v", err)
+	}
+	if resumedOutput.Len() == 0 {
+		t.Fatal("expected non-empty resumed job results")
+	}
+	jobLog, err := client.JobSearchLog(ctx, result.JobID)
+	if err != nil || strings.TrimSpace(jobLog.Text) == "" {
+		t.Fatalf("fetch existing job search.log: bytes=%d error=%v", len(jobLog.Text), err)
+	}
+	cancellation, err := client.CancelJob(ctx, result.JobID)
+	if err != nil || cancellation.Requested {
+		t.Fatalf("completed job cancellation should be idempotent: %+v, %v", cancellation, err)
+	}
 }

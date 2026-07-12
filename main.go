@@ -74,6 +74,32 @@ func tlsVerifyFromEnv() (bool, error) {
 	return parsed, nil
 }
 
+func newSplunkClientFromEnvironment(app string, logger *slog.Logger) (*splunk.Client, time.Duration, error) {
+	username := os.Getenv("SPLUNKUSERNAME")
+	password := os.Getenv("SPLUNKPASSWORD")
+	baseURL := strings.TrimRight(os.Getenv("SPLUNKBASEURL"), "/")
+	token := os.Getenv("SPLUNKTOKEN")
+	if token == "" && (username == "" || password == "") {
+		return nil, 0, errors.New("missing SPLUNKUSERNAME and/or SPLUNKPASSWORD when SPLUNKTOKEN is not set")
+	}
+	if baseURL == "" {
+		return nil, 0, errors.New("missing SPLUNKBASEURL")
+	}
+	tlsVerify, err := tlsVerifyFromEnv()
+	if err != nil {
+		return nil, 0, err
+	}
+	timeout, err := timeoutFromEnv()
+	if err != nil {
+		return nil, 0, err
+	}
+	client, err := splunk.NewClient(splunk.Config{App: strings.TrimSpace(app), Username: username, Password: password, Token: token, BaseURL: baseURL, InsecureSkipVerify: !tlsVerify, Timeout: timeout, Logger: logger})
+	if err != nil {
+		return nil, 0, err
+	}
+	return client, timeout, nil
+}
+
 func readSearchFile(path string) (string, error) {
 	fileContent, err := os.ReadFile(path)
 	if err != nil {
@@ -198,11 +224,16 @@ func usage() {
 	_, _ = fmt.Fprintln(output, `Usage:
   querysplunk [options]
 
-Run a Splunk search from a plain SPL file or from a structured YAML config.
+Run a Splunk search or reconnect to an existing Splunk search job.
 
 Examples:
   querysplunk -version
   querysplunk -validate-config search.yml
+  querysplunk -job-sid 1258421375.19 -job-action status
+  querysplunk -job-sid 1258421375.19 -job-action wait
+  querysplunk -job-sid 1258421375.19 -job-action results -o results.json
+  querysplunk -job-sid 1258421375.19 -job-action search-log
+  querysplunk -job-sid 1258421375.19 -job-action cancel
   querysplunk -q query.txt -o splunkresults.json
   querysplunk -q query.txt -earliest=-15m -latest=now
   querysplunk -config search.yml
@@ -241,6 +272,8 @@ func main() {
 	var allowOldEarliest bool
 	var allowIndexWildcard bool
 	var showVersion bool
+	var jobID string
+	var jobAction string
 
 	log.SetFlags(0)
 	log.SetOutput(new(logWriter))
@@ -256,6 +289,8 @@ func main() {
 	flag.BoolVar(&allowOldEarliest, "allow-old-earliest", false, "Allow earliest times older than the default one-year safety limit")
 	flag.BoolVar(&allowIndexWildcard, "allow-index-wildcard", false, "Allow searches that explicitly use index=*")
 	flag.BoolVar(&showVersion, "version", false, "Print version and build metadata, then exit")
+	flag.StringVar(&jobID, "job-sid", "", "Use an existing Splunk search job ID")
+	flag.StringVar(&jobAction, "job-action", "", "Act on -job-sid: status, wait, results, search-log, or cancel")
 	flag.BoolVar(&forceWrite, "force", false, "Allow -write-config to overwrite an existing file")
 	flag.StringVar(&queryFile, "q", "query.txt", "Read the SPL search from this plain text file")
 	flag.StringVar(&outputFile, "o", "splunkresults.json", "Write Splunk results to this file")
@@ -265,6 +300,12 @@ func main() {
 		return
 	}
 	flagsSet := explicitFlags()
+	jobOptions := jobCLIOptions{Action: jobAction, JobID: jobID, OutputFile: outputFile, OutputExplicit: flagsSet["o"]}
+	jobMode, err := validateJobMode(jobOptions, flagsSet, configFile, validateConfigFile, writeConfigFile)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
+		os.Exit(2)
+	}
 	if err := validateConfigModes(configFile, validateConfigFile, writeConfigFile); err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
 		os.Exit(2)
@@ -302,6 +343,24 @@ func main() {
 			log.Fatal("ERROR: could not load .env file")
 		}
 	}
+	if jobMode {
+		if appContext == "" {
+			appContext = os.Getenv("SPLUNKAPP")
+		}
+		client, timeout, err := newSplunkClientFromEnvironment(appContext, nil)
+		if err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
+			os.Exit(1)
+		}
+		defer client.Close()
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		if err := runJobAction(ctx, client, jobOptions, os.Stdout); err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	var config querypkg.Config
 	if configFile != "" {
@@ -323,7 +382,6 @@ func main() {
 	}
 	appContext = strings.TrimSpace(appContext)
 
-	var err error
 	if configFile == "" {
 		splunkQueryString, readErr := readSearchFile(queryFile)
 		err = readErr
@@ -332,31 +390,6 @@ func main() {
 		}
 		config = querypkg.Config{Search: splunkQueryString, OutputFile: outputFile}
 	}
-
-	username := os.Getenv("SPLUNKUSERNAME")
-	password := os.Getenv("SPLUNKPASSWORD")
-	baseURL := strings.TrimRight(os.Getenv("SPLUNKBASEURL"), "/")
-	splunkToken := os.Getenv("SPLUNKTOKEN")
-
-	if splunkToken == "" && (username == "" || password == "") {
-		log.Fatal("ERROR: missing SPLUNKUSERNAME and/or SPLUNKPASSWORD when SPLUNKTOKEN is not set")
-	}
-	if baseURL == "" {
-		log.Fatal("ERROR: Missing SPLUNKBASEURL")
-	}
-
-	tlsVerify, err := tlsVerifyFromEnv()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	timeout, err := timeoutFromEnv()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
 
 	overrides := querypkg.Overrides{AllowOldEarliest: allowOldEarliest, AllowIndexWildcard: allowIndexWildcard}
 	if flagsSet["app"] || strings.TrimSpace(config.App) == "" {
@@ -388,20 +421,13 @@ func main() {
 		log.Fatal(err)
 	}
 	preparedConfig := prepared.Config()
-	client, err := splunk.NewClient(splunk.Config{
-		App:                preparedConfig.App,
-		Username:           username,
-		Password:           password,
-		Token:              splunkToken,
-		BaseURL:            baseURL,
-		InsecureSkipVerify: !tlsVerify,
-		Timeout:            timeout,
-		Logger:             slog.New(slog.NewTextHandler(new(logWriter), &slog.HandlerOptions{Level: slog.LevelInfo})),
-	})
+	client, timeout, err := newSplunkClientFromEnvironment(preparedConfig.App, slog.New(slog.NewTextHandler(new(logWriter), &slog.HandlerOptions{Level: slog.LevelInfo})))
 	if err != nil {
 		log.Fatalf("ERROR: Invalid Splunk configuration: %s", err)
 	}
 	defer client.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
 
 	if err = client.Authenticate(ctx); err != nil {
 		log.Fatalf("ERROR: Couldn't login to Splunk: %s", err)

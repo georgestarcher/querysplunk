@@ -47,3 +47,27 @@ func ExampleClient() {
 	}
 	_ = result.Data // decode according to the requested Splunk output mode
 }
+
+func ExampleClient_InspectJob() {
+	client, err := splunk.NewClient(splunk.Config{
+		BaseURL: os.Getenv("SPLUNKBASEURL"),
+		Token:   os.Getenv("SPLUNKTOKEN"),
+		App:     "search",
+	})
+	if err != nil {
+		return
+	}
+	defer client.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	status, err := client.InspectJob(ctx, "1258421375.19")
+	if err != nil {
+		return
+	}
+	if !status.Terminal {
+		status, err = client.WaitJob(ctx, status.JobID)
+	}
+	_ = status
+	_ = err
+}
