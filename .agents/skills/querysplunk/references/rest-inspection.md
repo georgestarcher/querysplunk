@@ -72,9 +72,13 @@ When explaining SPL behind a `savedsearch` command:
    state, schedule, alert type, actions, dispatch bounds, owner, app, and sharing
    context.
 2. Record dependencies by `(type, owner, app, name)` so objects with the same
-   title in different namespaces are not conflated.
+   title in different namespaces are not conflated. For macros, `name` is the
+   complete stanza title including arity: `foo`, `foo(1)`, and `foo(2)` are
+   distinct dependencies.
 3. Extract referenced `savedsearch`, macro, `lookup`, and `inputlookup` names.
-   Treat extraction as a best-effort aid, not a complete SPL parser.
+   For a macro invocation, count its arguments and resolve the matching
+   arity-bearing stanza title instead of de-duplicating by base name. Treat
+   extraction as a best-effort aid, not a complete SPL parser.
 4. Resolve at most five levels. Stop on a previously visited key and report a
    cycle instead of dispatching another search.
 5. Report ambiguous and inaccessible references as unresolved. Never guess an

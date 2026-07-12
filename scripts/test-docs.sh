@@ -87,6 +87,7 @@ done
 grep -F '| savedsearch "' README.md >/dev/null || fail "README savedsearch example is missing the generating pipe"
 grep -F 'Never use direct token-bearing `curl`' "${skill_dir}/references/rest-inspection.md" >/dev/null || fail "REST inspection reference is missing the direct-call safety boundary"
 grep -F 'Resolve at most five levels' "${skill_dir}/references/rest-inspection.md" >/dev/null || fail "REST inspection reference is missing its recursion limit"
+grep -F 'complete stanza title including arity' "${skill_dir}/references/rest-inspection.md" >/dev/null || fail "REST inspection reference does not distinguish macro arity"
 grep -F 'Execution time that regularly meets or exceeds that' "${skill_dir}/references/rest-inspection.md" >/dev/null || fail "REST inspection reference is missing saved-search schedule-overlap guidance"
 grep -F 'examples/health/scheduler-health.yml' "${skill_dir}/references/rest-inspection.md" >/dev/null || fail "REST inspection reference does not connect overlap analysis to scheduler health"
 grep -F '| table title search disabled is_scheduled cron_schedule alert_type actions dispatch.earliest_time dispatch.latest_time eai:acl.app eai:acl.owner eai:acl.sharing' examples/rest/saved-search-definition.yml >/dev/null || fail "saved-search inspection is missing its bounded SPL, schedule, action, or namespace fields"
