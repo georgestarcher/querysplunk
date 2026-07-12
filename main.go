@@ -128,6 +128,19 @@ func runConfigValidation(path string, overrides querypkg.Overrides, output, erro
 	return 0
 }
 
+func validateConfigModes(configFile, validateConfigFile, writeConfigFile string) error {
+	modes := 0
+	for _, path := range []string{configFile, validateConfigFile, writeConfigFile} {
+		if strings.TrimSpace(path) != "" {
+			modes++
+		}
+	}
+	if modes > 1 {
+		return errors.New("-config, -validate-config, and -write-config are mutually exclusive")
+	}
+	return nil
+}
+
 func explicitFlags() map[string]bool {
 	set := make(map[string]bool)
 	flag.Visit(func(f *flag.Flag) {
@@ -252,6 +265,10 @@ func main() {
 		return
 	}
 	flagsSet := explicitFlags()
+	if err := validateConfigModes(configFile, validateConfigFile, writeConfigFile); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
+		os.Exit(2)
+	}
 
 	if writeConfigFile != "" {
 		if err := writeSkeletonConfig(writeConfigFile, forceWrite); err != nil {
@@ -261,10 +278,6 @@ func main() {
 		return
 	}
 	if validateConfigFile != "" {
-		if configFile != "" {
-			_, _ = fmt.Fprintln(os.Stderr, "ERROR: -validate-config and -config cannot be used together")
-			os.Exit(2)
-		}
 		overrides := querypkg.Overrides{AllowOldEarliest: allowOldEarliest, AllowIndexWildcard: allowIndexWildcard}
 		if flagsSet["app"] {
 			overrides.App = &appContext

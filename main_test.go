@@ -86,6 +86,32 @@ func TestRunConfigValidationSeparatesPlanAndErrors(t *testing.T) {
 	}
 }
 
+func TestValidateConfigModes(t *testing.T) {
+	valid := [][3]string{
+		{},
+		{"search.yml", "", ""},
+		{"", "search.yml", ""},
+		{"", "", "search.yml"},
+	}
+	for _, modes := range valid {
+		if err := validateConfigModes(modes[0], modes[1], modes[2]); err != nil {
+			t.Fatalf("validateConfigModes%q returned %v", modes, err)
+		}
+	}
+
+	conflicts := [][3]string{
+		{"run.yml", "validate.yml", ""},
+		{"", "validate.yml", "write.yml"},
+		{"run.yml", "", "write.yml"},
+		{"run.yml", "validate.yml", "write.yml"},
+	}
+	for _, modes := range conflicts {
+		if err := validateConfigModes(modes[0], modes[1], modes[2]); err == nil {
+			t.Fatalf("validateConfigModes%q accepted conflicting modes", modes)
+		}
+	}
+}
+
 func TestVersionStringDevelopmentDefaults(t *testing.T) {
 	if got, want := versionString(), "querysplunk version=dev commit=unknown"; got != want {
 		t.Fatalf("versionString() = %q; want %q", got, want)
