@@ -158,6 +158,35 @@ if [ -n "$current_version" ] && [ "$current_version" != "$source_version" ]; the
   fi
 fi
 
+transaction_active=false
+binary_installed=false
+codex_installed=false
+claude_installed=false
+codex_target=""
+codex_backup=""
+claude_target=""
+claude_backup=""
+
+rollback_transaction() {
+  [ "$transaction_active" = true ] || return 0
+  transaction_active=false
+  if [ "$claude_installed" = true ]; then
+    rm -rf "$claude_target"
+    if [ -e "$claude_backup" ]; then mv "$claude_backup" "$claude_target"; fi
+  fi
+  if [ "$codex_installed" = true ]; then
+    rm -rf "$codex_target"
+    if [ -e "$codex_backup" ]; then mv "$codex_backup" "$codex_target"; fi
+  fi
+  if [ "$binary_installed" = true ]; then
+    rm -f "$target_binary"
+    if [ -e "$binary_backup" ]; then mv "$binary_backup" "$target_binary"; fi
+  fi
+}
+
+trap 'rollback_transaction' EXIT
+trap 'rollback_transaction; exit 1' HUP INT TERM
+
 mkdir -p "$bin_dir"
 binary_temp="${bin_dir}/.querysplunk.install.$$"
 binary_backup="${bin_dir}/.querysplunk.backup.$$"
@@ -168,7 +197,8 @@ if [ -e "$target_binary" ]; then
   mv "$target_binary" "$binary_backup"
 fi
 if mv "$binary_temp" "$target_binary" && installed_version=$(binary_version "$target_binary") && [ "$installed_version" = "$source_version" ]; then
-  rm -f "$binary_backup"
+  binary_installed=true
+  transaction_active=true
 else
   rm -f "$target_binary" "$binary_temp"
   if [ -e "$binary_backup" ]; then
@@ -195,7 +225,18 @@ install_skill() {
     mv "$target" "$backup"
   fi
   if mv "$temp" "$target" && [ -f "${target}/SKILL.md" ]; then
-    rm -rf "$backup"
+    case "$assistant" in
+      codex)
+        codex_installed=true
+        codex_target=$target
+        codex_backup=$backup
+        ;;
+      claude)
+        claude_installed=true
+        claude_target=$target
+        claude_backup=$backup
+        ;;
+    esac
   else
     rm -rf "$target" "$temp"
     if [ -e "$backup" ]; then
@@ -228,6 +269,12 @@ case "$agent" in
   both) install_skill codex; install_skill claude ;;
   none) echo "No assistant skill selected; use --agent codex, claude, or both to install one." ;;
 esac
+
+rm -f "$binary_backup"
+if [ "$codex_installed" = true ]; then rm -rf "$codex_backup"; fi
+if [ "$claude_installed" = true ]; then rm -rf "$claude_backup"; fi
+transaction_active=false
+trap - EXIT HUP INT TERM
 
 echo "Installed querysplunk ${source_version}: ${target_binary}"
 case ":${PATH:-}:" in

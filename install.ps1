@@ -124,7 +124,6 @@ try {
     if ($InstalledVersion -ne $SourceVersion) {
         throw "installed binary version did not match the release"
     }
-    Remove-Item -LiteralPath $BinaryBackup -Force -ErrorAction SilentlyContinue
 } catch {
     Remove-Item -LiteralPath $TargetBinary, $BinaryTemp -Force -ErrorAction SilentlyContinue
     if (Test-Path -LiteralPath $BinaryBackup) {
@@ -156,7 +155,6 @@ function Install-AgentSkill([string]$Assistant) {
         if (-not (Test-Path -LiteralPath (Join-Path $target "SKILL.md") -PathType Leaf)) {
             throw "installed skill is incomplete"
         }
-        Remove-Item -LiteralPath $backup -Recurse -Force -ErrorAction SilentlyContinue
     } catch {
         Remove-Item -LiteralPath $target, $temp -Recurse -Force -ErrorAction SilentlyContinue
         if (Test-Path -LiteralPath $backup) {
@@ -164,7 +162,8 @@ function Install-AgentSkill([string]$Assistant) {
         }
         throw "$Assistant skill installation failed; the previous skill was restored"
     }
-    Write-Output "Installed $Assistant skill: $target"
+    Write-Host "Installed $Assistant skill: $target"
+    return [pscustomobject]@{ Target = $target; Backup = $backup }
 }
 
 if ($Agent -eq "auto") {
@@ -176,12 +175,35 @@ if ($Agent -eq "auto") {
     else { $Agent = "none" }
 }
 
-switch ($Agent) {
-    "codex" { Install-AgentSkill "codex" }
-    "claude" { Install-AgentSkill "claude" }
-    "both" { Install-AgentSkill "codex"; Install-AgentSkill "claude" }
-    "none" { Write-Output "No assistant skill selected; use -Agent codex, claude, or both to install one." }
+try {
+    $InstalledSkills = @()
+    switch ($Agent) {
+        "codex" { $InstalledSkills += Install-AgentSkill "codex" }
+        "claude" { $InstalledSkills += Install-AgentSkill "claude" }
+        "both" {
+            $InstalledSkills += Install-AgentSkill "codex"
+            $InstalledSkills += Install-AgentSkill "claude"
+        }
+        "none" { Write-Output "No assistant skill selected; use -Agent codex, claude, or both to install one." }
+    }
+} catch {
+    for ($i = $InstalledSkills.Count - 1; $i -ge 0; $i--) {
+        Remove-Item -LiteralPath $InstalledSkills[$i].Target -Recurse -Force -ErrorAction SilentlyContinue
+        if (Test-Path -LiteralPath $InstalledSkills[$i].Backup) {
+            Move-Item -LiteralPath $InstalledSkills[$i].Backup -Destination $InstalledSkills[$i].Target
+        }
+    }
+    Remove-Item -LiteralPath $TargetBinary -Force -ErrorAction SilentlyContinue
+    if (Test-Path -LiteralPath $BinaryBackup) {
+        Move-Item -LiteralPath $BinaryBackup -Destination $TargetBinary
+    }
+    throw "assistant skill installation failed; the previous binary and skills were restored"
 }
+
+foreach ($installedSkill in $InstalledSkills) {
+    Remove-Item -LiteralPath $installedSkill.Backup -Recurse -Force -ErrorAction SilentlyContinue
+}
+Remove-Item -LiteralPath $BinaryBackup -Force -ErrorAction SilentlyContinue
 
 Write-Output "Installed querysplunk $SourceVersion`: $TargetBinary"
 $pathEntries = $env:PATH -split [IO.Path]::PathSeparator

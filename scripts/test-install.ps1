@@ -41,6 +41,18 @@ try {
     Assert-True $blocked "unrecognized existing binary was overwritten"
     Assert-True ((Get-Content -LiteralPath $BlockedTarget -Raw).Trim() -eq "keep") "unrecognized existing binary was not preserved"
 
+    $RollbackHome = Join-Path $WorkDir "rollback home"
+    $RollbackBin = Join-Path $WorkDir "rollback bin"
+    & (Join-Path $BundleV1 "install.ps1") -Agent none -HomeDir $RollbackHome -BinDir $RollbackBin | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $RollbackHome ".codex") -Force | Out-Null
+    $BlockingSkillPath = Join-Path $RollbackHome ".codex/skills"
+    Set-Content -LiteralPath $BlockingSkillPath -Value "blocking"
+    $blocked = $false
+    try { & (Join-Path $BundleV2 "install.ps1") -Upgrade -Agent codex -HomeDir $RollbackHome -BinDir $RollbackBin | Out-Null } catch { $blocked = $true }
+    Assert-True $blocked "skill installation failure did not fail the transaction"
+    Assert-True ((& (Join-Path $RollbackBin "querysplunk.exe") -version) -eq "querysplunk version=v1.0.0 commit=installer-test") "skill failure did not restore the previous binary"
+    Assert-True ((Get-Content -LiteralPath $BlockingSkillPath -Raw).Trim() -eq "blocking") "skill failure changed the blocking user file"
+
     & (Join-Path $BundleV1 "install.ps1") -Agent both -HomeDir $HomeDir -BinDir $BinDir | Out-Null
     $TargetBinary = Join-Path $BinDir "querysplunk.exe"
     Assert-True ((& $TargetBinary -version) -eq "querysplunk version=v1.0.0 commit=installer-test") "fresh binary installation failed"

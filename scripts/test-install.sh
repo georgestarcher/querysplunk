@@ -42,6 +42,17 @@ if HOME="$home_dir" "$bundle_v1/install.sh" --agent none --home-dir "$home_dir" 
 fi
 [ "$(cat "$blocked_bin/querysplunk")" = "keep" ] || fail "unrecognized existing binary was not preserved"
 
+rollback_home="${work_dir}/rollback home"
+rollback_bin="${work_dir}/rollback bin"
+HOME="$rollback_home" "$bundle_v1/install.sh" --agent none --home-dir "$rollback_home" --bin-dir "$rollback_bin" >/dev/null
+mkdir -p "$rollback_home/.codex"
+echo blocking >"$rollback_home/.codex/skills"
+if HOME="$rollback_home" "$bundle_v2/install.sh" --upgrade --agent codex --home-dir "$rollback_home" --bin-dir "$rollback_bin" >/dev/null 2>&1; then
+  fail "skill installation failure did not fail the transaction"
+fi
+[ "$("$rollback_bin/querysplunk" -version)" = "querysplunk version=v1.0.0 commit=installer-test" ] || fail "skill failure did not restore the previous binary"
+[ "$(cat "$rollback_home/.codex/skills")" = "blocking" ] || fail "skill failure changed the blocking user file"
+
 HOME="$home_dir" "$bundle_v1/install.sh" --agent both --home-dir "$home_dir" --bin-dir "$bin_dir" >/dev/null
 [ "$("$bin_dir/querysplunk" -version)" = "querysplunk version=v1.0.0 commit=installer-test" ] || fail "fresh binary installation failed"
 [ -f "$home_dir/.codex/skills/querysplunk/SKILL.md" ] || fail "Codex skill was not installed"
