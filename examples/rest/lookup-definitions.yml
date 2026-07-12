@@ -2,9 +2,8 @@ app: search
 output_file: lookup-definitions.json
 mode: job
 search: |
-  | rest /servicesNS/-/search/data/transforms/lookups count=100 strict=true splunk_server=local
-  | search title="example_lookup"
-  | fields title filename collection external_type eai:appName eai:userName
+  | rest /servicesNS/-/search/data/transforms/lookups count=1 strict=true splunk_server=local search="title=example_lookup"
+  | table title filename collection external_type eai:appName eai:userName
 results:
   endpoint: auto
   output_mode: json

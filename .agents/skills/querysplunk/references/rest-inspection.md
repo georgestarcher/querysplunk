@@ -27,11 +27,16 @@ not a general HTTP client and does not authorize POST or DELETE operations.
    server-group inspection.
 4. Add `strict=true` so endpoint failures fail the search instead of becoming
    easy-to-miss warnings.
-5. Set a finite `count`, apply supported endpoint-side `search` arguments when
-   possible, then retain only the fields needed to answer the question.
-6. Put the SPL in YAML, validate it offline, show the effective plan, and ask
+5. Apply supported endpoint-side `search` arguments before setting a finite
+   `count`. Never truncate a collection and then filter locally for a named
+   object; it can produce a false not-found result.
+6. After any required local filtering, use `fields` or `table` to return only
+   the fields needed to answer the question. Saved-search SPL inspection should
+   normally return only `title` and `search`; request scheduling or ACL fields
+   only when the user asks for them.
+7. Put the SPL in YAML, validate it offline, show the effective plan, and ask
    for approval before contacting Splunk.
-7. Summarize bounded results. Do not paste complete definitions or messages
+8. Summarize bounded results. Do not paste complete definitions or messages
    unless the user specifically needs them and confirms they are safe to show.
 
 A REST-only generating search does not read indexed events, so event-time
@@ -57,8 +62,9 @@ paths over undocumented `/admin/...` paths.
 
 When explaining SPL behind a `savedsearch` command:
 
-1. Resolve the exact saved-search title in its app context and retain the
-   returned owner, app, sharing, disabled state, and SPL.
+1. Resolve the exact saved-search title with an endpoint-side `search=` filter
+   in its app context. Project `title` and `search` for SPL inspection; retain
+   owner, app, sharing, scheduling, or disabled state only when relevant.
 2. Record dependencies by `(type, owner, app, name)` so objects with the same
    title in different namespaces are not conflated.
 3. Extract referenced `savedsearch`, macro, `lookup`, and `inputlookup` names.

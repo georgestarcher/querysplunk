@@ -2,9 +2,8 @@ app: search
 output_file: saved-search-definition.json
 mode: job
 search: |
-  | rest /servicesNS/-/search/saved/searches count=100 strict=true splunk_server=local
-  | search title="Example Saved Search"
-  | fields title search disabled is_scheduled cron_schedule author eai:appName eai:userName
+  | rest /servicesNS/-/search/saved/searches count=1 strict=true splunk_server=local search="title=\"Example Saved Search\""
+  | table title search
 results:
   endpoint: auto
   output_mode: json

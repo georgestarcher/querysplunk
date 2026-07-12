@@ -87,6 +87,10 @@ done
 grep -F '| savedsearch "' README.md >/dev/null || fail "README savedsearch example is missing the generating pipe"
 grep -F 'Never use direct token-bearing `curl`' "${skill_dir}/references/rest-inspection.md" >/dev/null || fail "REST inspection reference is missing the direct-call safety boundary"
 grep -F 'Resolve at most five levels' "${skill_dir}/references/rest-inspection.md" >/dev/null || fail "REST inspection reference is missing its recursion limit"
+grep -F '| table title search' examples/rest/saved-search-definition.yml >/dev/null || fail "saved-search inspection does not narrow output to title and SPL"
+for config in examples/rest/system-messages.yml examples/rest/saved-search-definition.yml examples/rest/macro-definitions.yml examples/rest/lookup-definitions.yml; do
+  grep -Eq '^[[:space:]]+\| (fields|table) ' "$config" || fail "$config does not project a bounded field set"
+done
 
 if rg -n 'v1\.1\.0|## Quick setup|does not have standard YAML frontmatter' README.md INSTALL.md "$skill_dir"; then
   fail "documentation contains stale release or skill language"
