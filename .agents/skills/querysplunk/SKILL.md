@@ -1,6 +1,24 @@
+---
+name: querysplunk
+description: Safely install, upgrade, prepare, validate, execute, monitor, and resume Splunk searches with querysplunk YAML files or SPL input.
+---
+
 # querysplunk local assistant skill
 
 Use this skill when a user asks a local AI assistant to run, inspect, or prepare `querysplunk` searches from SPL files or structured YAML configs.
+
+## Installation and upgrades
+
+When working from an extracted release bundle, read the bundled `INSTALL.md`
+and use `install.sh` on macOS/Linux or `install.ps1` on Windows. Do not recreate
+the installer by manually copying files. The installer can target Codex, Claude
+Code, both, or neither and never reads Splunk credentials.
+
+Use the installer's explicit upgrade mode for a different installed version.
+Preserve saved YAML, results, environment files, credentials, configuration,
+shell settings, and unrelated skills. Never authorize a downgrade unless the
+user explicitly requests it. Verify `querysplunk -version` and the selected
+assistant skill files after installation or upgrade.
 
 ## What querysplunk does
 
@@ -144,3 +162,4 @@ querysplunk -config search.yml
 - `references/yaml-config.md`: YAML config behavior and examples.
 - `references/live-integration.md`: Optional live Splunk validation workflow.
 - `references/release.md`: Release bundle layout and verification.
+- `references/installation.md`: Release installation and safe upgrade workflow.

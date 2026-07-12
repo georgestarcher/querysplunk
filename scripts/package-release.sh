@@ -20,11 +20,18 @@ dist_abs="$(cd "${dist_dir}" && pwd)"
 
 copy_bundle_files() {
   local package_dir="$1"
-  cp README.md "${package_dir}/README.md"
+  local goos="$2"
+  cp README.md INSTALL.md "${package_dir}/"
   mkdir -p "${package_dir}/examples" "${package_dir}/.agents/skills"
   mkdir -p "${package_dir}/examples/health"
   find examples/health -maxdepth 1 -type f \( -name '*.md' -o -name '*.yml' \) -exec cp {} "${package_dir}/examples/health/" \;
   cp -R .agents/skills/querysplunk "${package_dir}/.agents/skills/querysplunk"
+  if [ "${goos}" = "windows" ]; then
+    cp install.ps1 "${package_dir}/install.ps1"
+  else
+    cp install.sh "${package_dir}/install.sh"
+    chmod 0755 "${package_dir}/install.sh"
+  fi
 }
 
 build_package() {
@@ -37,7 +44,7 @@ build_package() {
 
   mkdir -p "${package_dir}"
   CGO_ENABLED=0 GOOS="${goos}" GOARCH="${goarch}" go build -trimpath -ldflags="${ldflags}" -o "${output}" .
-  copy_bundle_files "${package_dir}"
+  copy_bundle_files "${package_dir}" "${goos}"
 
   if [ "${goos}" = "windows" ]; then
     (cd "${build_dir}" && zip -qr "${dist_abs}/${name}.zip" "${name}")

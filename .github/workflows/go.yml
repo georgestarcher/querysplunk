@@ -68,6 +68,9 @@ jobs:
     - name: Test with race detector
       run: go test -race -v ./...
 
+    - name: Test POSIX installer
+      run: scripts/test-install.sh
+
     - name: Fuzz search log parser
       run: go test ./splunk -run '^$' -fuzz '^FuzzAnalyzeJobLog$' -fuzztime 5s
 
@@ -114,6 +117,15 @@ jobs:
 
       - name: Test
         run: go test ./...
+
+      - name: Test POSIX installer
+        if: runner.os == 'macOS'
+        run: scripts/test-install.sh
+
+      - name: Test PowerShell installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/test-install.ps1
 
       - name: Test with race detector
         if: runner.os != 'Windows'

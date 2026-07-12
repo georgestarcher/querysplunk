@@ -30,6 +30,11 @@ jobs:
       - name: Test
         run: go test ./...
 
+      - name: Test installers
+        run: |
+          scripts/test-install.sh
+          pwsh -NoProfile -File scripts/test-install.ps1
+
       - name: Build release assets
         run: |
           set -euo pipefail

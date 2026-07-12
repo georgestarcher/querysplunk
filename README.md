@@ -149,7 +149,35 @@ The package example is compiled by `go test`. Run focused and complete checks:
 go test -race ./...
 ```
 
-## Quick setup
+## Install a release
+
+Download the archive for your platform and `checksums.txt` from the GitHub
+Release, verify the selected archive, and extract it. Install the command and
+locally detected Codex or Claude Code skills with one command:
+
+```bash
+./install.sh
+```
+
+On Windows PowerShell:
+
+```powershell
+.\install.ps1
+```
+
+The installer is user-local, does not require Go or administrator access, and
+does not read or configure Splunk credentials. It installs one consistent
+command name, `querysplunk`. Use `--agent codex|claude|both|none` or the
+PowerShell `-Agent` equivalent to select assistant targets explicitly.
+
+To upgrade from an extracted newer release, run `./install.sh --upgrade` or
+`.\install.ps1 -Upgrade`. Upgrades preserve saved YAML, results, environment
+files, credentials, configuration, and unrelated skills; downgrades require an
+explicit acknowledgement. See [INSTALL.md](INSTALL.md) for checksum commands,
+custom destinations, agent-driven installation and upgrade prompts, PATH
+guidance, first use, and removal.
+
+## Build from source
 
 ```bash
 brew install go
@@ -649,10 +677,11 @@ release:
 - `checksums.txt`
 
 Each platform archive is a self-contained CLI bundle. It includes the
-`splunkquery` binary, this README, `examples/health/`, and
+`splunkquery` binary, the platform installer, `INSTALL.md`, this README,
+`examples/health/`, and
 `.agents/skills/querysplunk/` for local AI-assistant workflows. The `.agents`
-content is an operating runbook for assistant tooling; it is not loaded by the
-`querysplunk` binary.
+content is a portable Agent Skill for Codex and Claude Code; it is not loaded by
+the `querysplunk` binary until installed into an assistant's skill directory.
 
 Identify an installed binary without credentials or a Splunk connection:
 
