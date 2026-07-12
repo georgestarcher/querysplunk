@@ -62,7 +62,7 @@ done
 unset SPLUNKBASEURL SPLUNKTOKEN SPLUNKUSERNAME SPLUNKPASSWORD SPLUNKAPP || true
 "$binary" -write-config "${tmp_dir}/generated.yml" >/dev/null 2>&1
 "$binary" -validate-config "${tmp_dir}/generated.yml" >"${tmp_dir}/generated-plan.yml"
-for config in examples/health/*.yml; do
+for config in examples/health/*.yml examples/rest/*.yml; do
   "$binary" -validate-config "$config" >"${tmp_dir}/$(basename "$config").plan.yml"
 done
 
@@ -76,12 +76,17 @@ for required in \
   references/live-integration.md \
   references/preflight-and-recovery.md \
   references/release.md \
+  references/rest-inspection.md \
   references/result-analysis.md \
   references/spl-authoring.md \
   references/yaml-config.md \
   templates/handoff.yml; do
   [ -f "${skill_dir}/${required}" ] || fail "skill is missing ${required}"
 done
+
+grep -F '| savedsearch "' README.md >/dev/null || fail "README savedsearch example is missing the generating pipe"
+grep -F 'Never use direct token-bearing `curl`' "${skill_dir}/references/rest-inspection.md" >/dev/null || fail "REST inspection reference is missing the direct-call safety boundary"
+grep -F 'Resolve at most five levels' "${skill_dir}/references/rest-inspection.md" >/dev/null || fail "REST inspection reference is missing its recursion limit"
 
 if rg -n 'v1\.1\.0|## Quick setup|does not have standard YAML frontmatter' README.md INSTALL.md "$skill_dir"; then
   fail "documentation contains stale release or skill language"

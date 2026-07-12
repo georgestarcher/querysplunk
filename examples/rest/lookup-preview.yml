@@ -1,0 +1,12 @@
+app: search
+output_file: lookup-preview.json
+mode: job
+search: |
+  | inputlookup example_lookup
+  | head 100
+results:
+  endpoint: auto
+  output_mode: json
+  count: 0
+diagnostics:
+  search_log: summary

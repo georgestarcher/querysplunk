@@ -339,7 +339,7 @@ For complex investigations, consider keeping the SPL in Splunk as a saved
 search and calling it from the query file:
 
 ```
-savedsearch "SOAR - Auth Model - Investigation" user=bob
+| savedsearch "SOAR - Auth Model - Investigation" user=bob
 ```
 
 This pattern works well from SOAR products or Splunk Enterprise Security
