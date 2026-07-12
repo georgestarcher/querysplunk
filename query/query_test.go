@@ -199,7 +199,11 @@ func TestPreparedExecutionStreamingDiagnosticsAndAtomicReplacement(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer client.Close()
+	t.Cleanup(func() {
+		if err := client.Close(); err != nil {
+			t.Errorf("close Splunk client: %v", err)
+		}
+	})
 	output := filepath.Join(t.TempDir(), "result.json")
 	prepared, err := query.Prepare(query.Config{Search: "success earliest=-5m", OutputFile: output, Diagnostics: query.Diagnostics{SearchLog: "summary"}}, query.Overrides{}, query.SafetyPolicy{})
 	if err != nil {

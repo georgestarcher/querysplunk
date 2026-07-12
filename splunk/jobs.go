@@ -314,7 +314,7 @@ func (conn connection) inspectJob(ctx context.Context, jobID string) (JobStatus,
 		return JobStatus{JobID: jobID}, err
 	}
 	if strings.TrimSpace(content.DispatchState) == "" {
-		return JobStatus{JobID: jobID}, errors.New("Splunk job status response did not include dispatchState")
+		return JobStatus{JobID: jobID}, errors.New("splunk job status response did not include dispatchState")
 	}
 	return publicJobStatus(jobID, content), nil
 }
@@ -383,7 +383,9 @@ func writeAtomically(path string, write func(io.Writer) error) error {
 		return err
 	}
 	temporaryPath := temporary.Name()
-	defer os.Remove(temporaryPath)
+	defer func() {
+		_ = os.Remove(temporaryPath)
+	}()
 	if err := temporary.Chmod(0600); err != nil {
 		_ = temporary.Close()
 		return err

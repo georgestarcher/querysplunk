@@ -73,7 +73,11 @@ func TestDispatchQueryIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create client: %v", err)
 	}
-	defer client.Close()
+	t.Cleanup(func() {
+		if err := client.Close(); err != nil {
+			t.Errorf("close Splunk client: %v", err)
+		}
+	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()

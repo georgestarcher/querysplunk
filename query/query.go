@@ -211,7 +211,9 @@ func LoadFile(path string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 	config, err := Load(file)
 	if err != nil {
 		return Config{}, fmt.Errorf("load query config %q: %w", path, err)
@@ -225,7 +227,9 @@ func LoadFS(files fs.FS, path string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 	config, err := Load(file)
 	if err != nil {
 		return Config{}, fmt.Errorf("load query config %q: %w", path, err)
@@ -432,7 +436,9 @@ func (prepared Prepared) SearchToFile(ctx context.Context, client *splunk.Client
 		return splunk.Result{}, err
 	}
 	temporaryPath := temporary.Name()
-	defer os.Remove(temporaryPath)
+	defer func() {
+		_ = os.Remove(temporaryPath)
+	}()
 	if err := temporary.Chmod(0600); err != nil {
 		_ = temporary.Close()
 		return splunk.Result{}, err
@@ -472,9 +478,11 @@ func WriteSkeleton(path string, force bool) error {
 		}
 		return err
 	}
-	defer file.Close()
-	_, err = io.WriteString(file, SkeletonConfig)
-	return err
+	if _, err := io.WriteString(file, SkeletonConfig); err != nil {
+		_ = file.Close()
+		return err
+	}
+	return file.Close()
 }
 
 func HasTimeBounds(search string, dispatch map[string][]string) bool {

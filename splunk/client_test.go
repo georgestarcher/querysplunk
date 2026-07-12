@@ -57,7 +57,11 @@ func TestClientSearchAndTypedErrors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer client.Close()
+	t.Cleanup(func() {
+		if err := client.Close(); err != nil {
+			t.Errorf("close Splunk client: %v", err)
+		}
+	})
 
 	result, err := client.Search(context.Background(), "search index=_internal earliest=-5m | head 1", splunk.SearchOptions{})
 	if err != nil {

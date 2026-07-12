@@ -82,7 +82,11 @@ func TestRunJobActions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer client.Close()
+	t.Cleanup(func() {
+		if err := client.Close(); err != nil {
+			t.Errorf("close Splunk client: %v", err)
+		}
+	})
 
 	for _, action := range []string{jobActionStatus, jobActionWait, jobActionCancel} {
 		var output bytes.Buffer
