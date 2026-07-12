@@ -98,7 +98,7 @@ $CurrentVersion = $null
 if (Test-Path -LiteralPath $TargetBinary -PathType Leaf) {
     try { $CurrentVersion = Get-BinaryVersion $TargetBinary } catch { $CurrentVersion = $null }
 }
-if (Test-Path -LiteralPath $TargetBinary -and -not $CurrentVersion) {
+if ((Test-Path -LiteralPath $TargetBinary) -and -not $CurrentVersion) {
     throw "$TargetBinary exists but is not a recognized querysplunk installation; move it or choose -BinDir"
 }
 if ($CurrentVersion -and $CurrentVersion -ne $SourceVersion) {
