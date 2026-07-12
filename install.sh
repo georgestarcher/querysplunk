@@ -27,7 +27,8 @@ fail() {
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 source_binary="${script_dir}/splunkquery"
 skill_source="${script_dir}/.agents/skills/querysplunk"
-home_dir=${HOME:-}
+default_home=${HOME:-}
+home_dir=$default_home
 bin_dir=""
 agent="auto"
 upgrade=false
@@ -72,7 +73,10 @@ case "$agent" in
 esac
 [ -n "$home_dir" ] || fail "HOME is not set; use --home-dir"
 [ "$allow_downgrade" = false ] || [ "$upgrade" = true ] || fail "--allow-downgrade requires --upgrade"
-[ -n "$bin_dir" ] || bin_dir="${home_dir}/.local/bin"
+if [ -z "$bin_dir" ]; then
+  [ -n "$default_home" ] || fail "HOME is not set; use --bin-dir"
+  bin_dir="${default_home}/.local/bin"
+fi
 [ -f "$source_binary" ] || fail "release bundle is missing splunkquery"
 [ -f "${skill_source}/SKILL.md" ] || fail "release bundle is missing the querysplunk skill"
 grep -Eq '^name:[[:space:]]+querysplunk[[:space:]]*$' "${skill_source}/SKILL.md" || fail "querysplunk skill has invalid name frontmatter"
