@@ -109,6 +109,12 @@ without a temporary file or a complete in-memory copy. The client copies
 parameter maps before use and is safe for concurrent searches after
 authentication. Each returned byte slice belongs to the caller.
 
+Existing search jobs can be resumed by SID with `InspectJob`, `WaitJob`,
+`JobResults`, `JobResultsTo`, `JobResultsToFile`, `JobSearchLog`,
+`JobSearchLogToFile`, and `CancelJob`. SIDs are validated before URL
+construction. `WaitJob` never cancels a pre-existing remote job when its local
+context ends; cancellation requires an explicit `CancelJob` call.
+
 Important package boundaries and limits:
 
 - Package logging is disabled by default. Set `Config.Logger` to a
@@ -409,6 +415,37 @@ Warnings and errors found in `search.log` are logged even if Splunk reports the
 job state as `DONE`, because the job can complete with useful non-fatal
 diagnostics. Large diagnostic output is bounded before being written to logs.
 
+### Resume an existing search job
+
+Use a Splunk search job ID (SID) to reconnect without reading SPL or dispatching
+a new search:
+
+```bash
+querysplunk -job-sid 1258421375.19 -job-action status
+querysplunk -job-sid 1258421375.19 -job-action wait
+querysplunk -job-sid 1258421375.19 -job-action results -o results.json
+querysplunk -job-sid 1258421375.19 -job-action search-log
+querysplunk -job-sid 1258421375.19 -job-action search-log -o search.log
+querysplunk -job-sid 1258421375.19 -job-action cancel
+```
+
+`status`, `wait`, and `cancel` emit JSON summaries. `results` atomically writes
+the unmodified results response to `-o`, which defaults to
+`splunkresults.json`, and emits a JSON file summary. `search-log` writes the raw
+log to standard output; with an explicit `-o`, it atomically saves the raw log
+and emits a bounded JSON diagnostic summary.
+
+Job-action usage errors exit `2`; authentication, context, REST, terminal-state,
+and local I/O failures exit `1`. Errors are written to standard error so JSON
+or raw data on standard output remains usable. An interrupted `wait` does not
+cancel the remote job. Cancellation is always explicit and completed jobs are
+handled idempotently without posting a control action.
+
+Possession of a SID does not bypass Splunk authorization, app namespace, job
+ownership, sharing, or retention. A job may be unavailable after its TTL or to
+a different user or app context. Splunk documents job status, results, control,
+and `search.log` under its [search job REST endpoints](https://help.splunk.com/en/splunk-enterprise/leverage-rest-apis/rest-api-reference/10.4/search-endpoints/search-endpoint-descriptions).
+
 ## Usage
 
 Run `querysplunk -h` to see the supported flags. Logs are written to standard
@@ -425,11 +462,16 @@ querysplunk -h
 Usage:
   querysplunk [options]
 
-Run a Splunk search from a plain SPL file or from a structured YAML config.
+Run a Splunk search or reconnect to an existing Splunk search job.
 
 Examples:
   querysplunk -version
   querysplunk -validate-config search.yml
+  querysplunk -job-sid 1258421375.19 -job-action status
+  querysplunk -job-sid 1258421375.19 -job-action wait
+  querysplunk -job-sid 1258421375.19 -job-action results -o results.json
+  querysplunk -job-sid 1258421375.19 -job-action search-log
+  querysplunk -job-sid 1258421375.19 -job-action cancel
   querysplunk -q query.txt -o splunkresults.json
   querysplunk -q query.txt -earliest=-15m -latest=now
   querysplunk -config search.yml
@@ -466,6 +508,10 @@ Options:
     	Allow -write-config to overwrite an existing file
   -latest string
     	Set dispatch latest_time, such as now
+  -job-action string
+	Act on -job-sid: status, wait, results, search-log, or cancel
+  -job-sid string
+	Use an existing Splunk search job ID
   -o string
     	Write Splunk results to this file (default "splunkresults.json")
   -q string

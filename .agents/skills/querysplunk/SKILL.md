@@ -64,6 +64,19 @@ Run a bundled health example:
 querysplunk -config examples/health/splunkd-health.yml
 ```
 
+Reconnect to an existing job without dispatching SPL:
+
+```bash
+querysplunk -job-sid <sid> -job-action status
+querysplunk -job-sid <sid> -job-action wait
+querysplunk -job-sid <sid> -job-action results -o results.json
+querysplunk -job-sid <sid> -job-action search-log
+```
+
+Only run `querysplunk -job-sid <sid> -job-action cancel` after the user
+explicitly confirms that the identified job should be cancelled. A local wait
+timeout does not cancel a resumed job.
+
 ## Workflow for user-provided YAML
 
 1. Check that the YAML file exists.
@@ -81,6 +94,12 @@ For embedded Go workflows, use `query.LoadFile`, apply explicit
 findings, and then call
 `Prepared.Search`, `Prepared.SearchTo`, or `Prepared.SearchToFile`. Apply every
 override before preparation so post-merge safety analysis cannot be bypassed.
+
+For an existing SID, use `splunk.Client.InspectJob`, `WaitJob`, `JobResultsTo`,
+or `JobSearchLog`. Treat SIDs as deployment-scoped references: possession does
+not bypass Splunk authorization, ownership, app visibility, or retention. Never
+infer permission to cancel from permission to inspect; call `CancelJob` only
+after explicit user authorization.
 
 ## Environment notes
 

@@ -71,9 +71,9 @@ type splunkJobStatus struct {
 
 // JobLogDiagnostics contains bounded diagnostics extracted from search.log.
 type JobLogDiagnostics struct {
-	ExecutionDuration string
-	Warnings          []string
-	Errors            []string
+	ExecutionDuration string   `json:"execution_duration,omitempty"`
+	Warnings          []string `json:"warnings,omitempty"`
+	Errors            []string `json:"errors,omitempty"`
 }
 
 // HTTPStatusError reports a non-2xx Splunk REST response. URL excludes user
@@ -360,7 +360,7 @@ func (conn connection) validateAuth(ctx context.Context) error {
 
 // Return URL string formatted with job sid.
 func (conn connection) jobURL(query *queryState) string {
-	return fmt.Sprintf("%s/services/search/jobs/%s", conn.BaseURL, query.Job.Sid)
+	return fmt.Sprintf("%s/services/search/jobs/%s", conn.BaseURL, url.PathEscape(query.Job.Sid))
 }
 
 func (conn connection) pollInterval() time.Duration {
@@ -504,11 +504,7 @@ func (conn connection) cancelJob(query *queryState) error {
 	ctx, cancel := context.WithTimeout(context.Background(), cancelTimeout)
 	defer cancel()
 
-	data := make(url.Values)
-	data = conn.namespaceValues(data)
-	data.Add("action", "cancel")
-	_, err := conn.httpPost(ctx, fmt.Sprintf("%s/control", conn.jobURL(query)), &data)
-	return err
+	return conn.cancelJobContext(ctx, query)
 }
 
 // defaultdispatchOptions returns legacy job-mode defaults.
