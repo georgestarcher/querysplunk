@@ -34,6 +34,14 @@ echo 'SPLUNKTOKEN=placeholder-not-a-secret' >"${home_dir}/saved/.env.test"
 make_bundle "$bundle_v1" "v1.0.0"
 make_bundle "$bundle_v2" "v2.0.0"
 
+blocked_bin="${work_dir}/blocked bin"
+mkdir -p "$blocked_bin"
+echo keep >"${blocked_bin}/querysplunk"
+if HOME="$home_dir" "$bundle_v1/install.sh" --agent none --home-dir "$home_dir" --bin-dir "$blocked_bin" >/dev/null 2>&1; then
+  fail "unrecognized existing binary was overwritten"
+fi
+[ "$(cat "$blocked_bin/querysplunk")" = "keep" ] || fail "unrecognized existing binary was not preserved"
+
 HOME="$home_dir" "$bundle_v1/install.sh" --agent both --home-dir "$home_dir" --bin-dir "$bin_dir" >/dev/null
 [ "$("$bin_dir/querysplunk" -version)" = "querysplunk version=v1.0.0 commit=installer-test" ] || fail "fresh binary installation failed"
 [ -f "$home_dir/.codex/skills/querysplunk/SKILL.md" ] || fail "Codex skill was not installed"

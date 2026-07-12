@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-version="${1:?usage: package-release.sh VERSION [binary_name] [dist_dir]}"
-binary_name="${2:-splunkquery}"
-dist_dir="${3:-dist}"
+version="${1:?usage: package-release.sh VERSION [dist_dir]}"
+binary_name="splunkquery"
+dist_dir="${2:-dist}"
 build_dir="build"
 commit="$(git rev-parse --short=12 HEAD 2>/dev/null || true)"
 commit="${commit:-unknown}"

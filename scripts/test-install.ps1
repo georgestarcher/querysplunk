@@ -32,6 +32,15 @@ try {
     New-Bundle $BundleV1 "v1.0.0"
     New-Bundle $BundleV2 "v2.0.0"
 
+    $BlockedBin = Join-Path $WorkDir "blocked bin"
+    New-Item -ItemType Directory -Path $BlockedBin -Force | Out-Null
+    $BlockedTarget = Join-Path $BlockedBin "querysplunk.exe"
+    Set-Content -LiteralPath $BlockedTarget -Value "keep"
+    $blocked = $false
+    try { & (Join-Path $BundleV1 "install.ps1") -Agent none -HomeDir $HomeDir -BinDir $BlockedBin | Out-Null } catch { $blocked = $true }
+    Assert-True $blocked "unrecognized existing binary was overwritten"
+    Assert-True ((Get-Content -LiteralPath $BlockedTarget -Raw).Trim() -eq "keep") "unrecognized existing binary was not preserved"
+
     & (Join-Path $BundleV1 "install.ps1") -Agent both -HomeDir $HomeDir -BinDir $BinDir | Out-Null
     $TargetBinary = Join-Path $BinDir "querysplunk.exe"
     Assert-True ((& $TargetBinary -version) -eq "querysplunk version=v1.0.0 commit=installer-test") "fresh binary installation failed"

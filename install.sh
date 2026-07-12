@@ -80,7 +80,7 @@ grep -Eq '^description:[[:space:]]+[^[:space:]].*$' "${skill_source}/SKILL.md" |
 
 binary_version() {
   output=$("$1" -version 2>/dev/null) || return 1
-  printf '%s\n' "$output" | sed -n 's/.*version=\([^[:space:]]*\).*/\1/p' | sed -n '1p'
+  printf '%s\n' "$output" | sed -n 's/^querysplunk version=\([^[:space:]]*\) commit=[^[:space:]]*$/\1/p' | sed -n '1p'
 }
 
 compare_versions() {
@@ -144,8 +144,10 @@ esac
 
 target_binary="${bin_dir}/querysplunk"
 current_version=""
-if [ -x "$target_binary" ]; then
+if [ -e "$target_binary" ]; then
+  [ -x "$target_binary" ] || fail "${target_binary} exists but is not a recognized querysplunk installation; move it or choose --bin-dir"
   current_version=$(binary_version "$target_binary" || true)
+  [ -n "$current_version" ] || fail "${target_binary} exists but is not a recognized querysplunk installation; move it or choose --bin-dir"
 fi
 
 if [ -n "$current_version" ] && [ "$current_version" != "$source_version" ]; then

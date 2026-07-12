@@ -36,7 +36,7 @@ if ($SkillText -notmatch '(?m)^name:\s+querysplunk\s*$' -or $SkillText -notmatch
 
 function Get-BinaryVersion([string]$Path) {
     $output = (& $Path -version 2>$null) -join " "
-    if ($LASTEXITCODE -ne 0 -or $output -notmatch 'version=([^\s]+)') {
+    if ($LASTEXITCODE -ne 0 -or $output -notmatch '^querysplunk version=([^\s]+) commit=[^\s]+$') {
         throw "could not read binary version"
     }
     return $Matches[1]
@@ -97,6 +97,9 @@ $TargetBinary = Join-Path $BinDir "querysplunk.exe"
 $CurrentVersion = $null
 if (Test-Path -LiteralPath $TargetBinary -PathType Leaf) {
     try { $CurrentVersion = Get-BinaryVersion $TargetBinary } catch { $CurrentVersion = $null }
+}
+if (Test-Path -LiteralPath $TargetBinary -and -not $CurrentVersion) {
+    throw "$TargetBinary exists but is not a recognized querysplunk installation; move it or choose -BinDir"
 }
 if ($CurrentVersion -and $CurrentVersion -ne $SourceVersion) {
     if (-not $Upgrade) {

@@ -50,7 +50,7 @@ jobs:
             *) echo "version must start with v, got ${VERSION}"; exit 1 ;;
           esac
 
-          scripts/package-release.sh "${VERSION}" splunkquery dist
+          scripts/package-release.sh "${VERSION}" dist
 
       - name: Verify release archive contents
         env:
