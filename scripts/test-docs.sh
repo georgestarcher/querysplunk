@@ -1,0 +1,90 @@
+#!/bin/sh
+set -eu
+
+repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+tmp_dir=$(mktemp -d)
+trap 'rm -rf "$tmp_dir"' EXIT HUP INT TERM
+cd "$repo_dir"
+
+fail() {
+  echo "ERROR: $*" >&2
+  exit 1
+}
+
+binary="${tmp_dir}/querysplunk"
+version="v0.0.0-qa"
+commit="docsqa"
+go build -trimpath -ldflags="-X main.version=${version} -X main.commit=${commit}" -o "$binary" .
+
+actual_version=$("$binary" -version)
+[ "$actual_version" = "querysplunk version=${version} commit=${commit}" ] || fail "release metadata output drifted"
+
+"$binary" -h >"${tmp_dir}/help.txt" 2>&1
+awk '/^  -[a-z]/ {print $1}' "${tmp_dir}/help.txt" | sort -u >"${tmp_dir}/help-flags"
+awk '/^  -[a-z]/ {print $1}' README.md | sort -u >"${tmp_dir}/readme-flags"
+comm -23 "${tmp_dir}/help-flags" "${tmp_dir}/readme-flags" >"${tmp_dir}/missing-readme-flags"
+comm -13 "${tmp_dir}/help-flags" "${tmp_dir}/readme-flags" >"${tmp_dir}/stale-readme-flags"
+if [ -s "${tmp_dir}/missing-readme-flags" ]; then
+  cat "${tmp_dir}/missing-readme-flags" >&2
+  fail "CLI flags are missing from the README help snapshot"
+fi
+if [ -s "${tmp_dir}/stale-readme-flags" ]; then
+  cat "${tmp_dir}/stale-readme-flags" >&2
+  fail "README help snapshot contains stale CLI flags"
+fi
+
+./install.sh --help >"${tmp_dir}/install-help.txt"
+check_installer_option() {
+  posix_option=$1
+  powershell_option=$2
+  grep -F -- "$posix_option" "${tmp_dir}/install-help.txt" >/dev/null || fail "POSIX installer help is missing ${posix_option}"
+  grep -F -- "$posix_option" INSTALL.md >/dev/null || fail "INSTALL.md is missing ${posix_option}"
+  grep -F -- "$powershell_option" INSTALL.md >/dev/null || fail "INSTALL.md is missing ${powershell_option}"
+}
+check_installer_option --agent -Agent
+check_installer_option --bin-dir -BinDir
+check_installer_option --home-dir -HomeDir
+check_installer_option --upgrade -Upgrade
+check_installer_option --allow-downgrade -AllowDowngrade
+
+rg -n -o '\]\([^)]+\)' --glob '*.md' . | while IFS=: read -r file line token; do
+  link=$(printf '%s' "$token" | sed 's/^](//; s/)$//')
+  case "$link" in
+    http://*|https://*|mailto:*|\#*) continue ;;
+  esac
+  link=${link%%#*}
+  link=${link%%\?*}
+  [ -n "$link" ] || continue
+  target="$(dirname "$file")/$link"
+  [ -e "$target" ] || fail "$file:$line has broken local link $link"
+done
+
+unset SPLUNKBASEURL SPLUNKTOKEN SPLUNKUSERNAME SPLUNKPASSWORD SPLUNKAPP || true
+"$binary" -write-config "${tmp_dir}/generated.yml" >/dev/null 2>&1
+"$binary" -validate-config "${tmp_dir}/generated.yml" >"${tmp_dir}/generated-plan.yml"
+for config in examples/health/*.yml; do
+  "$binary" -validate-config "$config" >"${tmp_dir}/$(basename "$config").plan.yml"
+done
+
+skill_dir=".agents/skills/querysplunk"
+[ "$(sed -n '1p' "${skill_dir}/SKILL.md")" = "---" ] || fail "skill frontmatter is missing"
+grep -Fx 'name: querysplunk' "${skill_dir}/SKILL.md" >/dev/null || fail "skill name frontmatter is invalid"
+grep -Eq '^description:[[:space:]]+[^[:space:]].*$' "${skill_dir}/SKILL.md" || fail "skill description frontmatter is invalid"
+for required in \
+  references/health-diagnostics.md \
+  references/installation.md \
+  references/live-integration.md \
+  references/preflight-and-recovery.md \
+  references/release.md \
+  references/result-analysis.md \
+  references/spl-authoring.md \
+  references/yaml-config.md \
+  templates/handoff.yml; do
+  [ -f "${skill_dir}/${required}" ] || fail "skill is missing ${required}"
+done
+
+if rg -n 'v1\.1\.0|## Quick setup|does not have standard YAML frontmatter' README.md INSTALL.md "$skill_dir"; then
+  fail "documentation contains stale release or skill language"
+fi
+
+echo "documentation, help, examples, and skill QA passed"

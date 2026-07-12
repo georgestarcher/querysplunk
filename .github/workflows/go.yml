@@ -71,6 +71,9 @@ jobs:
     - name: Test POSIX installer
       run: scripts/test-install.sh
 
+    - name: Test documentation, help, examples, and skill
+      run: scripts/test-docs.sh
+
     - name: Fuzz search log parser
       run: go test ./splunk -run '^$' -fuzz '^FuzzAnalyzeJobLog$' -fuzztime 5s
 

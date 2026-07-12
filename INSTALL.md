@@ -67,6 +67,14 @@ PowerShell uses `-Agent codex`, `-Agent claude`, `-Agent both`, or
 `-Agent none`. Use `--bin-dir` / `-BinDir` for a custom command directory. The
 installer prints exact PATH guidance when that directory is not active.
 
+Use `--home-dir DIR` on macOS/Linux or `-HomeDir DIR` on Windows to install
+assistant skills under a different home directory. This changes the skill
+targets only, such as `DIR/.codex/skills/querysplunk`; it does not move the
+binary, configure credentials, or edit the selected profile. Most users should
+keep the default. The option is useful for alternate local profiles, isolated
+automation, and installation testing. Use `--bin-dir` / `-BinDir` separately
+when the executable itself should be installed elsewhere.
+
 Start a new assistant session after creating an assistant's top-level skills
 directory for the first time. Invoke the installed skill as `$querysplunk` in
 Codex or `/querysplunk` in Claude Code, or ask naturally for help preparing or
