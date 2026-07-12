@@ -5,7 +5,9 @@ description: Safely install, upgrade, prepare, validate, execute, monitor, and r
 
 # querysplunk local assistant skill
 
-Use this skill when a user asks a local AI assistant to run, inspect, or prepare `querysplunk` searches from SPL files or structured YAML configs.
+Use this skill when a user asks a local AI assistant to install or upgrade
+querysplunk, or to prepare, validate, run, monitor, inspect, or resume searches
+from SPL files or structured YAML configs.
 
 ## Installation and upgrades
 

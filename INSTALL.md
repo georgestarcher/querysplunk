@@ -3,6 +3,16 @@
 Release archives are self-contained. They do not require Go, a repository
 clone, administrator access, or knowledge of assistant skill directories.
 
+Choose the archive for your computer:
+
+| Platform | Release asset |
+| --- | --- |
+| Apple Silicon Mac | `darwin-arm64.tar.gz` |
+| Intel Mac | `darwin-amd64.tar.gz` |
+| Linux x86-64 | `linux-amd64.tar.gz` |
+| Linux ARM64 | `linux-arm64.tar.gz` |
+| Windows x86-64 | `windows-amd64.zip` |
+
 ## Verify the download
 
 Download the archive for your platform and `checksums.txt` from the same GitHub
@@ -35,6 +45,15 @@ The default installation is user-local. It installs the command as
 for locally detected Codex and Claude Code installations. It never reads or
 configures Splunk credentials.
 
+The installer changes only:
+
+- the selected binary destination's `querysplunk` executable;
+- `~/.codex/skills/querysplunk/` when Codex is selected;
+- `~/.claude/skills/querysplunk/` when Claude Code is selected.
+
+It does not edit shell startup files, saved searches, results, environment
+files, credentials, or unrelated assistant skills.
+
 Select assistant targets explicitly when needed:
 
 ```bash
@@ -52,6 +71,12 @@ Start a new assistant session after creating an assistant's top-level skills
 directory for the first time. Invoke the installed skill as `$querysplunk` in
 Codex or `/querysplunk` in Claude Code, or ask naturally for help preparing or
 running a querysplunk search.
+
+Recommended first request:
+
+> Use querysplunk to create a time-bounded saved YAML search for the last 30
+> minutes. Generate the skeleton and validate it offline. Show me the effective
+> plan and safety findings, but do not execute it until I approve.
 
 ## Ask an agent to install it
 
@@ -107,6 +132,19 @@ Validation is offline and does not require credentials. After reviewing the
 effective plan and safety findings, configure Splunk connection settings in
 the environment and run the approved search. Use `-json-events` for agent-safe
 runtime progress and `-job-sid` to resume an existing job.
+
+For a live search, the assistant should follow this order:
+
+1. Generate YAML with `querysplunk -write-config`.
+2. Add bounded SPL and the intended app, output, and diagnostic settings.
+3. Validate with `querysplunk -validate-config`.
+4. Present the effective plan and any safety findings.
+5. Wait for approval before contacting Splunk.
+6. Execute with `-json-events`, keeping events separate from result output.
+7. Summarize result counts and bounded diagnostics without exposing secrets or
+   dumping raw sensitive output into chat.
+8. Preserve the SID so another session can inspect, wait for, or retrieve the
+   job. Cancellation always requires explicit authorization.
 
 ## Remove
 
