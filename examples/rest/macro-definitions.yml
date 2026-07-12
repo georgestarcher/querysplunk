@@ -2,7 +2,7 @@ app: search
 output_file: macro-definitions.json
 mode: job
 search: |
-  | rest /servicesNS/-/search/properties/macros count=1 strict=true splunk_server=local search="title=example_macro"
+  | rest /servicesNS/-/search/configs/conf-macros count=2 strict=true splunk_server=local search="title=example_macro"
   | table title definition args eai:appName eai:userName
 results:
   endpoint: auto

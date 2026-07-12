@@ -29,7 +29,9 @@ not a general HTTP client and does not authorize POST or DELETE operations.
    easy-to-miss warnings.
 5. Apply supported endpoint-side `search` arguments before setting a finite
    `count`. Never truncate a collection and then filter locally for a named
-   object; it can produce a false not-found result.
+   object; it can produce a false not-found result. When owner is `-`, request
+   at least two matches so duplicate names across owners remain detectable.
+   Use `count=1` only after the owner and app namespace are known.
 6. After any required local filtering, use `fields` or `table` to return only
    the fields needed to answer the question. Saved-search inspection should
    normally include `title`, `search`, `disabled`, `is_scheduled`,
@@ -50,7 +52,7 @@ commands read indexed events, normal time-bound rules apply.
 
 - System messages: `/services/messages`
 - Saved searches: `/servicesNS/<owner>/<app>/saved/searches`
-- Macro stanzas: `/servicesNS/<owner>/<app>/properties/macros`
+- Macro stanzas: `/servicesNS/<owner>/<app>/configs/conf-macros`
 - Lookup definitions: `/servicesNS/<owner>/<app>/data/transforms/lookups`
 - Lookup file metadata: `/servicesNS/<owner>/<app>/data/lookup-table-files`
 - Selected configuration: `/servicesNS/<owner>/<app>/properties/<file>`
@@ -65,8 +67,10 @@ paths over undocumented `/admin/...` paths.
 When explaining SPL behind a `savedsearch` command:
 
 1. Resolve the exact saved-search title with an endpoint-side `search=` filter
-   in its app context. Project the SPL together with enabled state, schedule,
-   alert type, actions, dispatch bounds, owner, app, and sharing context.
+   in its app context. If owner is unknown, fetch up to two matches and stop for
+   disambiguation when both are returned. Project the SPL together with enabled
+   state, schedule, alert type, actions, dispatch bounds, owner, app, and sharing
+   context.
 2. Record dependencies by `(type, owner, app, name)` so objects with the same
    title in different namespaces are not conflated.
 3. Extract referenced `savedsearch`, macro, `lookup`, and `inputlookup` names.
