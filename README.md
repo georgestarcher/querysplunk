@@ -159,11 +159,11 @@ Choose the archive that matches your computer:
 
 | Platform | Release asset |
 | --- | --- |
-| Apple Silicon Mac | `darwin-arm64.tar.gz` |
-| Intel Mac | `darwin-amd64.tar.gz` |
-| Linux x86-64 | `linux-amd64.tar.gz` |
-| Linux ARM64 | `linux-arm64.tar.gz` |
-| Windows x86-64 | `windows-amd64.zip` |
+| Apple Silicon Mac | `splunkquery-vX.Y.Z-darwin-arm64.tar.gz` |
+| Intel Mac | `splunkquery-vX.Y.Z-darwin-amd64.tar.gz` |
+| Linux x86-64 | `splunkquery-vX.Y.Z-linux-amd64.tar.gz` |
+| Linux ARM64 | `splunkquery-vX.Y.Z-linux-arm64.tar.gz` |
+| Windows x86-64 | `splunkquery-vX.Y.Z-windows-amd64.zip` |
 
 Download that archive and `checksums.txt` from the same GitHub Release. Verify
 the archive before extracting it; [INSTALL.md](INSTALL.md) provides exact
