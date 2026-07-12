@@ -85,8 +85,9 @@ When explaining SPL behind a `savedsearch` command:
 Macro definitions can contain nested macros or generating commands. Lookup
 definitions describe the backing mechanism; they do not necessarily return
 lookup rows. To inspect CSV or KV lookup contents, use a separately approved,
-bounded search such as `| inputlookup <name> | head 100` and return only needed
-fields. Never use `outputlookup` for inspection.
+bounded search such as `| inputlookup max=100 <name> | head 100` and return only
+needed fields. Put the limit on `inputlookup`; `head` alone can still allow the
+command to read a very large lookup. Never use `outputlookup` for inspection.
 
 ## Check for schedule overlap
 

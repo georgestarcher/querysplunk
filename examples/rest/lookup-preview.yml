@@ -2,7 +2,7 @@ app: search
 output_file: lookup-preview.json
 mode: job
 search: |
-  | inputlookup example_lookup
+  | inputlookup max=100 example_lookup
   | head 100
 results:
   endpoint: auto
