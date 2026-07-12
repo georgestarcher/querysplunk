@@ -111,6 +111,9 @@ instead of dumping the complete event stream into chat.
 
 ## Workflow for user-provided YAML
 
+Before live execution, read `references/preflight-and-recovery.md`. When
+creating or materially changing SPL, also read `references/spl-authoring.md`.
+
 1. Check that the YAML file exists.
 2. Read the YAML enough to identify `search`, `output_file`, `mode`, `safety`, dispatch bounds, and diagnostics settings.
 3. Confirm there are no obvious secrets in the YAML.
@@ -120,6 +123,11 @@ instead of dumping the complete event stream into chat.
 7. Read the configured `output_file` and summarize the result count and important fields.
 8. If `diagnostics.search_log` is `summary`, `save`, or `both`, surface warnings and errors reported by querysplunk.
 9. If `mode: export`, do not expect a search job ID or `search.log` diagnostics.
+
+After results are saved, follow `references/result-analysis.md`. For bundled or
+user-maintained health checks, follow `references/health-diagnostics.md`. If a
+job may outlive the current session, record only non-sensitive state using
+`templates/handoff.yml`.
 
 For embedded Go workflows, use `query.LoadFile`, apply explicit
 `query.Overrides`, call `query.Prepare`, inspect `Prepared.Plan` or typed
@@ -165,3 +173,8 @@ querysplunk -config search.yml
 - `references/live-integration.md`: Optional live Splunk validation workflow.
 - `references/release.md`: Release bundle layout and verification.
 - `references/installation.md`: Release installation and safe upgrade workflow.
+- `references/preflight-and-recovery.md`: Deterministic checks, failure classification, retry limits, and SID recovery.
+- `references/spl-authoring.md`: Time-bounded SPL authoring and modifying-command safety.
+- `references/result-analysis.md`: Bounded, privacy-aware result and diagnostic summaries.
+- `references/health-diagnostics.md`: Safe selection, execution, and interpretation of health checks.
+- `templates/handoff.yml`: Non-sensitive state for continuing work in another session.

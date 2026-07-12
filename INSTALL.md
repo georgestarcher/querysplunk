@@ -70,7 +70,9 @@ installer prints exact PATH guidance when that directory is not active.
 Start a new assistant session after creating an assistant's top-level skills
 directory for the first time. Invoke the installed skill as `$querysplunk` in
 Codex or `/querysplunk` in Claude Code, or ask naturally for help preparing or
-running a querysplunk search.
+running a querysplunk search. The skill includes focused playbooks for
+preflight and recovery, SPL authoring, bounded result analysis, health
+diagnostics, and non-sensitive session handoff.
 
 Recommended first request:
 

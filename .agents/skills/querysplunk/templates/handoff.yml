@@ -1,0 +1,12 @@
+# Non-sensitive querysplunk session handoff. Omit fields that are not known.
+config_file: ""
+validated: false
+execution_approved: false
+sid: ""
+state: ""
+output_file: ""
+events_file: ""
+diagnostics: "pending"
+next_action: "validate"
+
+# Never add credentials, base URLs, raw SPL, raw results, or search-log lines.

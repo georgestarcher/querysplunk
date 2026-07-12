@@ -226,6 +226,12 @@ instructs agents to keep credentials out of YAML and chat, preserve safety
 controls, separate events from results, resume interrupted jobs by SID, and
 require explicit authorization before cancellation.
 
+The bundled skill also includes deterministic preflight and recovery rules, SPL
+authoring guidance, bounded result analysis, health-diagnostic interpretation,
+and a non-sensitive session handoff template. These playbooks tell an agent when
+to retry, when to resume by SID, and when to stop for user correction instead of
+blindly redispatching searches.
+
 Splunk connection values remain environment configuration. See
 [Configuration environment](#configuration-environment) before the first live
 search.

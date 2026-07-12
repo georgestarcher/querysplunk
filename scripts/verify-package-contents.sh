@@ -14,6 +14,11 @@ required_common=(
   ".agents/skills/querysplunk/references/live-integration.md"
   ".agents/skills/querysplunk/references/release.md"
   ".agents/skills/querysplunk/references/installation.md"
+  ".agents/skills/querysplunk/references/preflight-and-recovery.md"
+  ".agents/skills/querysplunk/references/spl-authoring.md"
+  ".agents/skills/querysplunk/references/result-analysis.md"
+  ".agents/skills/querysplunk/references/health-diagnostics.md"
+  ".agents/skills/querysplunk/templates/handoff.yml"
 )
 
 example_output_files=()
