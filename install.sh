@@ -136,11 +136,12 @@ compare_versions() {
   '
 }
 
+valid_release_version() {
+  printf '%s\n' "$1" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'
+}
+
 source_version=$(binary_version "$source_binary") || fail "could not read bundled binary version"
-case "$source_version" in
-  v[0-9]*.[0-9]*.[0-9]*) ;;
-  *) fail "bundled binary does not contain a release version" ;;
-esac
+valid_release_version "$source_version" || fail "bundled binary does not contain a valid semantic release version"
 
 target_binary="${bin_dir}/querysplunk"
 current_version=""
@@ -153,6 +154,9 @@ fi
 if [ -n "$current_version" ] && [ "$current_version" != "$source_version" ]; then
   comparison=$(compare_versions "$source_version" "$current_version")
   [ "$upgrade" = true ] || fail "querysplunk ${current_version} is installed; rerun with --upgrade for ${source_version}"
+  if [ "$comparison" = "2" ] && [ "$allow_downgrade" = false ]; then
+    fail "cannot safely compare installed version ${current_version}; use --upgrade --allow-downgrade to confirm replacement"
+  fi
   if [ "$comparison" = "-1" ] && [ "$allow_downgrade" = false ]; then
     fail "refusing to downgrade querysplunk from ${current_version} to ${source_version}; use --upgrade --allow-downgrade to confirm"
   fi

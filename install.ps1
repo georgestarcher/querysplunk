@@ -43,7 +43,7 @@ function Get-BinaryVersion([string]$Path) {
 }
 
 function Get-SemVerParts([string]$Version) {
-    if ($Version -notmatch '^v?(\d+)\.(\d+)\.(\d+)(?:-([^+]+))?(?:\+.*)?$') {
+    if ($Version -notmatch '^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$') {
         return $null
     }
     return [pscustomobject]@{
@@ -88,8 +88,8 @@ function Compare-SemVer([string]$Left, [string]$Right) {
 }
 
 $SourceVersion = Get-BinaryVersion $SourceBinary
-if ($SourceVersion -notmatch '^v\d+\.\d+\.\d+') {
-    throw "bundled binary does not contain a release version"
+if ($null -eq (Get-SemVerParts $SourceVersion)) {
+    throw "bundled binary does not contain a valid semantic release version"
 }
 
 New-Item -ItemType Directory -Path $BinDir -Force | Out-Null
@@ -106,6 +106,9 @@ if ($CurrentVersion -and $CurrentVersion -ne $SourceVersion) {
         throw "querysplunk $CurrentVersion is installed; rerun with -Upgrade for $SourceVersion"
     }
     $comparison = Compare-SemVer $SourceVersion $CurrentVersion
+    if ($null -eq $comparison -and -not $AllowDowngrade) {
+        throw "cannot safely compare installed version $CurrentVersion; use -Upgrade -AllowDowngrade to confirm replacement"
+    }
     if ($comparison -eq -1 -and -not $AllowDowngrade) {
         throw "refusing to downgrade querysplunk from $CurrentVersion to $SourceVersion; use -Upgrade -AllowDowngrade to confirm"
     }

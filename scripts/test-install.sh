@@ -27,12 +27,14 @@ home_dir="${work_dir}/home with spaces"
 bin_dir="${work_dir}/bin with spaces"
 bundle_v1="${work_dir}/bundle-v1"
 bundle_v2="${work_dir}/bundle-v2"
+bundle_malformed="${work_dir}/bundle-malformed"
 mkdir -p "${home_dir}/.codex/skills/other" "${home_dir}/.claude" "${home_dir}/saved"
 echo keep >"${home_dir}/.codex/skills/other/KEEP"
 echo 'search: keep' >"${home_dir}/saved/user.yml"
 echo 'SPLUNKTOKEN=placeholder-not-a-secret' >"${home_dir}/saved/.env.test"
 make_bundle "$bundle_v1" "v1.0.0"
 make_bundle "$bundle_v2" "v2.0.0"
+make_bundle "$bundle_malformed" "v1.0.0foo"
 
 blocked_bin="${work_dir}/blocked bin"
 mkdir -p "$blocked_bin"
@@ -52,6 +54,11 @@ if HOME="$rollback_home" "$bundle_v2/install.sh" --upgrade --agent codex --home-
 fi
 [ "$("$rollback_bin/querysplunk" -version)" = "querysplunk version=v1.0.0 commit=installer-test" ] || fail "skill failure did not restore the previous binary"
 [ "$(cat "$rollback_home/.codex/skills")" = "blocking" ] || fail "skill failure changed the blocking user file"
+
+if HOME="$rollback_home" "$bundle_malformed/install.sh" --upgrade --allow-downgrade --agent none --home-dir "$rollback_home" --bin-dir "$rollback_bin" >/dev/null 2>&1; then
+  fail "malformed bundled version was accepted"
+fi
+[ "$("$rollback_bin/querysplunk" -version)" = "querysplunk version=v1.0.0 commit=installer-test" ] || fail "malformed version changed the installed binary"
 
 HOME="$home_dir" "$bundle_v1/install.sh" --agent both --home-dir "$home_dir" --bin-dir "$bin_dir" >/dev/null
 [ "$("$bin_dir/querysplunk" -version)" = "querysplunk version=v1.0.0 commit=installer-test" ] || fail "fresh binary installation failed"

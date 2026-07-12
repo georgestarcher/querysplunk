@@ -9,10 +9,10 @@ commit="$(git rev-parse --short=12 HEAD 2>/dev/null || true)"
 commit="${commit:-unknown}"
 ldflags="-s -w -X main.version=${version} -X main.commit=${commit}"
 
-case "${version}" in
-  v*) ;;
-  *) echo "version must start with v, got ${version}" >&2; exit 1 ;;
-esac
+if ! printf '%s\n' "${version}" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'; then
+  echo "version must be semantic and start with v, got ${version}" >&2
+  exit 1
+fi
 
 rm -rf "${build_dir}" "${dist_dir}"
 mkdir -p "${build_dir}" "${dist_dir}"

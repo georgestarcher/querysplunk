@@ -25,12 +25,14 @@ try {
     $BinDir = Join-Path $WorkDir "bin with spaces"
     $BundleV1 = Join-Path $WorkDir "bundle-v1"
     $BundleV2 = Join-Path $WorkDir "bundle-v2"
+    $BundleMalformed = Join-Path $WorkDir "bundle-malformed"
     New-Item -ItemType Directory -Path (Join-Path $HomeDir ".codex/skills/other"), (Join-Path $HomeDir ".claude"), (Join-Path $HomeDir "saved") -Force | Out-Null
     Set-Content -LiteralPath (Join-Path $HomeDir ".codex/skills/other/KEEP") -Value "keep"
     Set-Content -LiteralPath (Join-Path $HomeDir "saved/user.yml") -Value "search: keep"
     Set-Content -LiteralPath (Join-Path $HomeDir "saved/.env.test") -Value "SPLUNKTOKEN=placeholder-not-a-secret"
     New-Bundle $BundleV1 "v1.0.0"
     New-Bundle $BundleV2 "v2.0.0"
+    New-Bundle $BundleMalformed "v1.0.0foo"
 
     $BlockedBin = Join-Path $WorkDir "blocked bin"
     New-Item -ItemType Directory -Path $BlockedBin -Force | Out-Null
@@ -52,6 +54,11 @@ try {
     Assert-True $blocked "skill installation failure did not fail the transaction"
     Assert-True ((& (Join-Path $RollbackBin "querysplunk.exe") -version) -eq "querysplunk version=v1.0.0 commit=installer-test") "skill failure did not restore the previous binary"
     Assert-True ((Get-Content -LiteralPath $BlockingSkillPath -Raw).Trim() -eq "blocking") "skill failure changed the blocking user file"
+
+    $blocked = $false
+    try { & (Join-Path $BundleMalformed "install.ps1") -Upgrade -AllowDowngrade -Agent none -HomeDir $RollbackHome -BinDir $RollbackBin | Out-Null } catch { $blocked = $true }
+    Assert-True $blocked "malformed bundled version was accepted"
+    Assert-True ((& (Join-Path $RollbackBin "querysplunk.exe") -version) -eq "querysplunk version=v1.0.0 commit=installer-test") "malformed version changed the installed binary"
 
     & (Join-Path $BundleV1 "install.ps1") -Agent both -HomeDir $HomeDir -BinDir $BinDir | Out-Null
     $TargetBinary = Join-Path $BinDir "querysplunk.exe"
