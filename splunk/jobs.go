@@ -264,6 +264,10 @@ func (conn connection) inspectJob(ctx context.Context, jobID string) (JobStatus,
 
 func publicJobStatus(jobID string, content jobStatusContent) JobStatus {
 	state := strings.ToUpper(strings.TrimSpace(content.DispatchState))
+	terminal := state == dispatchStateDone || isTerminalErrorState(state)
+	if state == dispatchStatePause || state == dispatchStatePaused {
+		terminal = false
+	}
 	return JobStatus{
 		JobID:        jobID,
 		State:        state,
@@ -271,7 +275,7 @@ func publicJobStatus(jobID string, content jobStatusContent) JobStatus {
 		ScanCount:    parseCount(content.ScanCount),
 		EventCount:   parseCount(content.EventCount),
 		ResultCount:  parseCount(content.ResultCount),
-		Terminal:     state == dispatchStateDone || isTerminalErrorState(state),
+		Terminal:     terminal,
 		Successful:   state == dispatchStateDone,
 	}
 }

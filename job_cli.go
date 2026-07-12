@@ -75,6 +75,9 @@ func runJobAction(ctx context.Context, client *splunk.Client, options jobCLIOpti
 		return encodeJSON(output, status)
 	case jobActionWait:
 		status, err := client.WaitJob(ctx, options.JobID)
+		if err != nil && strings.TrimSpace(status.State) == "" {
+			return err
+		}
 		if encodeErr := encodeJSON(output, status); encodeErr != nil {
 			return encodeErr
 		}

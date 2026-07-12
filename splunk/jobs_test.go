@@ -233,6 +233,7 @@ func TestCancelJobActiveAndTerminal(t *testing.T) {
 		wantControls  int32
 	}{
 		{name: "active", state: "RUNNING", wantRequested: true, wantControls: 1},
+		{name: "paused", state: "PAUSED", wantRequested: true, wantControls: 1},
 		{name: "terminal", state: "DONE", wantRequested: false, wantControls: 0},
 	} {
 		t.Run(test.name, func(t *testing.T) {

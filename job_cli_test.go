@@ -122,3 +122,27 @@ func TestRunJobActions(t *testing.T) {
 		t.Fatalf("saved log=%q summary=%s", logData, logSummary.String())
 	}
 }
+
+func TestRunJobWaitDoesNotPrintMissingSnapshot(t *testing.T) {
+	const jobID = "expired-job"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/services/authentication/current-context":
+			_, _ = io.WriteString(w, `{"entry":[{}]}`)
+		case "/services/search/jobs/" + jobID:
+			http.NotFound(w, request)
+		default:
+			http.NotFound(w, request)
+		}
+	}))
+	defer server.Close()
+	client, err := splunk.NewClient(splunk.Config{BaseURL: server.URL, Token: "token", HTTPClient: server.Client(), PollInterval: time.Millisecond})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var output bytes.Buffer
+	err = runJobAction(context.Background(), client, jobCLIOptions{Action: jobActionWait, JobID: jobID}, &output)
+	if err == nil || output.Len() != 0 {
+		t.Fatalf("wait error=%v output=%q; want error and empty output", err, output.String())
+	}
+}
