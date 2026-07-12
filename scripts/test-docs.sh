@@ -87,7 +87,7 @@ done
 grep -F '| savedsearch "' README.md >/dev/null || fail "README savedsearch example is missing the generating pipe"
 grep -F 'Never use direct token-bearing `curl`' "${skill_dir}/references/rest-inspection.md" >/dev/null || fail "REST inspection reference is missing the direct-call safety boundary"
 grep -F 'Resolve at most five levels' "${skill_dir}/references/rest-inspection.md" >/dev/null || fail "REST inspection reference is missing its recursion limit"
-grep -F '| table title search' examples/rest/saved-search-definition.yml >/dev/null || fail "saved-search inspection does not narrow output to title and SPL"
+grep -F '| table title search disabled is_scheduled cron_schedule alert_type actions dispatch.earliest_time dispatch.latest_time eai:acl.app eai:acl.owner eai:acl.sharing' examples/rest/saved-search-definition.yml >/dev/null || fail "saved-search inspection is missing its bounded SPL, schedule, action, or namespace fields"
 for config in examples/rest/system-messages.yml examples/rest/saved-search-definition.yml examples/rest/macro-definitions.yml examples/rest/lookup-definitions.yml; do
   grep -Eq '^[[:space:]]+\| (fields|table) ' "$config" || fail "$config does not project a bounded field set"
 done

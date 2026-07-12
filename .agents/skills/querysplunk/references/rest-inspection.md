@@ -31,9 +31,11 @@ not a general HTTP client and does not authorize POST or DELETE operations.
    `count`. Never truncate a collection and then filter locally for a named
    object; it can produce a false not-found result.
 6. After any required local filtering, use `fields` or `table` to return only
-   the fields needed to answer the question. Saved-search SPL inspection should
-   normally return only `title` and `search`; request scheduling or ACL fields
-   only when the user asks for them.
+   the fields needed to answer the question. Saved-search inspection should
+   normally include `title`, `search`, `disabled`, `is_scheduled`,
+   `cron_schedule`, `alert_type`, `actions`, dispatch bounds, and app/owner/
+   sharing context. This is enough to distinguish scheduled reports from
+   alerts and understand attached actions without returning the full object.
 7. Put the SPL in YAML, validate it offline, show the effective plan, and ask
    for approval before contacting Splunk.
 8. Summarize bounded results. Do not paste complete definitions or messages
@@ -63,8 +65,8 @@ paths over undocumented `/admin/...` paths.
 When explaining SPL behind a `savedsearch` command:
 
 1. Resolve the exact saved-search title with an endpoint-side `search=` filter
-   in its app context. Project `title` and `search` for SPL inspection; retain
-   owner, app, sharing, scheduling, or disabled state only when relevant.
+   in its app context. Project the SPL together with enabled state, schedule,
+   alert type, actions, dispatch bounds, owner, app, and sharing context.
 2. Record dependencies by `(type, owner, app, name)` so objects with the same
    title in different namespaces are not conflated.
 3. Extract referenced `savedsearch`, macro, `lookup`, and `inputlookup` names.
