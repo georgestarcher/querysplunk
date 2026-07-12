@@ -40,6 +40,9 @@ func (err *JobStateError) Error() string {
 // zero because the caller owns those policies and the HTTP client. Logger is
 // optional; when nil, the package emits no logs. A supplied logger may be used
 // concurrently and receives only bounded, non-sensitive operational fields.
+// EventSink is optional and receives synchronous typed lifecycle events. Logger
+// and EventSink are independent; configure only one to avoid duplicate
+// representations of the same lifecycle activity.
 type Config struct {
 	BaseURL            string
 	Token              string
@@ -51,6 +54,7 @@ type Config struct {
 	InsecureSkipVerify bool
 	HTTPClient         *http.Client
 	Logger             *slog.Logger
+	EventSink          EventSink
 }
 
 // Client is a Splunk REST client. Its zero value is not usable; construct one
@@ -137,6 +141,7 @@ func NewClient(config Config) (*Client, error) {
 			PollInterval: config.PollInterval,
 			client:       httpClient,
 			logger:       config.Logger,
+			events:       &eventDispatcher{sink: config.EventSink},
 		},
 		ownedClient: ownedClient,
 	}, nil
@@ -207,8 +212,10 @@ func (client *Client) SearchTo(ctx context.Context, search string, options Searc
 		SearchLogFile:      options.SearchLogFile,
 	}
 	if err := conn.dispatchQuery(ctx, &query, dispatch, output); err != nil {
+		conn.emitEvent(ctx, RuntimeEvent{Kind: EventOperation, Severity: EventSeverityError, Operation: "search", JobID: query.Job.Sid, State: query.State, Outcome: "failure"})
 		return resultFromQuery(query, nil), err
 	}
+	conn.emitEvent(ctx, RuntimeEvent{Kind: EventOperation, Severity: EventSeverityInfo, Operation: "search", JobID: query.Job.Sid, State: query.State, Outcome: "success"})
 	return resultFromQuery(query, nil), nil
 }
 

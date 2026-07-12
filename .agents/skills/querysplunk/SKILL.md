@@ -77,6 +77,18 @@ Only run `querysplunk -job-sid <sid> -job-action cancel` after the user
 explicitly confirms that the identified job should be cancelled. A local wait
 timeout does not cancel a resumed job.
 
+For machine-readable progress, add `-json-events` and capture standard error
+separately. Parse each stderr line as one JSON event; do not merge it with raw
+stdout results or `search.log`:
+
+```bash
+querysplunk -json-events -config search.yml 2>events.jsonl
+```
+
+Events contain bounded counts and state, never raw SPL, result bodies, complete
+search logs, credentials, or private URLs. Summarize event kinds and outcomes
+instead of dumping the complete event stream into chat.
+
 ## Workflow for user-provided YAML
 
 1. Check that the YAML file exists.

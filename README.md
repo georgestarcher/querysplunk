@@ -115,6 +115,13 @@ Existing search jobs can be resumed by SID with `InspectJob`, `WaitJob`,
 construction. `WaitJob` never cancels a pre-existing remote job when its local
 context ends; cancellation requires an explicit `CancelJob` call.
 
+Set `splunk.Config.EventSink` to receive typed `RuntimeEvent` values for normal
+and resumed jobs. Events are synchronous and serialized in increasing
+`sequence` order for each client, including concurrent searches. A sink must
+return quickly and must not call back into the same client. `EventSink` and
+`Logger` are independent; normally configure one representation to avoid
+duplicate lifecycle reporting.
+
 Important package boundaries and limits:
 
 - Package logging is disabled by default. Set `Config.Logger` to a
@@ -446,6 +453,33 @@ ownership, sharing, or retention. A job may be unavailable after its TTL or to
 a different user or app context. Splunk documents job status, results, control,
 and `search.log` under its [search job REST endpoints](https://help.splunk.com/en/splunk-enterprise/leverage-rest-apis/rest-api-reference/10.4/search-endpoints/search-endpoint-descriptions).
 
+### Machine-readable runtime events
+
+Add `-json-events` to a live search or resumed-job command to write one compact
+JSON object per line to standard error:
+
+```bash
+querysplunk -json-events -config search.yml 2>events.jsonl
+querysplunk -json-events -job-sid 1258421375.19 -job-action wait 2>events.jsonl
+```
+
+Standard output remains reserved for YAML plans, JSON operation summaries, raw
+results, or raw `search.log`. Without `-json-events`, the CLI retains its
+human-readable lifecycle logging. JSON events contain these stable fields when
+applicable:
+
+- `sequence`, `time`, `kind`, and `severity`
+- `operation`, `sid`, `state`, and progress/count fields
+- `from_endpoint` and `to_endpoint` for fallback
+- `execution_duration`, `warning_count`, and `error_count`
+- `output_file`, `cancel_requested`, and `outcome`
+
+Event kinds are `job_dispatched`, `job_status`, `endpoint_fallback`,
+`diagnostics`, `cancellation`, `output_saved`, and `operation`. Events never
+contain credentials, private base URLs, SPL, results, raw search logs, or
+individual diagnostic lines. Delivery is synchronous and ordering is defined
+by the per-client `sequence`; consumers should not assume wall-clock spacing.
+
 ## Usage
 
 Run `querysplunk -h` to see the supported flags. Logs are written to standard
@@ -467,6 +501,7 @@ Run a Splunk search or reconnect to an existing Splunk search job.
 Examples:
   querysplunk -version
   querysplunk -validate-config search.yml
+  querysplunk -json-events -config search.yml
   querysplunk -job-sid 1258421375.19 -job-action status
   querysplunk -job-sid 1258421375.19 -job-action wait
   querysplunk -job-sid 1258421375.19 -job-action results -o results.json
@@ -512,6 +547,8 @@ Options:
 	Act on -job-sid: status, wait, results, search-log, or cancel
   -job-sid string
 	Use an existing Splunk search job ID
+  -json-events
+	Write machine-readable lifecycle events as JSON Lines to stderr
   -o string
     	Write Splunk results to this file (default "splunkresults.json")
   -q string

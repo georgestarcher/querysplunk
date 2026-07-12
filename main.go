@@ -39,7 +39,7 @@ func (writer logWriter) Write(bytes []byte) (int, error) {
 	}
 
 	message := []byte(time.Now().UTC().Format("2006-01-02T15:04:05.999Z") + " " + hostname + " splunkquery [DEBUG] " + string(bytes))
-	written, err := os.Stdout.Write(message)
+	written, err := os.Stderr.Write(message)
 	if err != nil {
 		return written, err
 	}
@@ -74,7 +74,7 @@ func tlsVerifyFromEnv() (bool, error) {
 	return parsed, nil
 }
 
-func newSplunkClientFromEnvironment(app string, logger *slog.Logger) (*splunk.Client, time.Duration, error) {
+func newSplunkClientFromEnvironment(app string, logger *slog.Logger, eventSink splunk.EventSink) (*splunk.Client, time.Duration, error) {
 	username := os.Getenv("SPLUNKUSERNAME")
 	password := os.Getenv("SPLUNKPASSWORD")
 	baseURL := strings.TrimRight(os.Getenv("SPLUNKBASEURL"), "/")
@@ -93,7 +93,7 @@ func newSplunkClientFromEnvironment(app string, logger *slog.Logger) (*splunk.Cl
 	if err != nil {
 		return nil, 0, err
 	}
-	client, err := splunk.NewClient(splunk.Config{App: strings.TrimSpace(app), Username: username, Password: password, Token: token, BaseURL: baseURL, InsecureSkipVerify: !tlsVerify, Timeout: timeout, Logger: logger})
+	client, err := splunk.NewClient(splunk.Config{App: strings.TrimSpace(app), Username: username, Password: password, Token: token, BaseURL: baseURL, InsecureSkipVerify: !tlsVerify, Timeout: timeout, Logger: logger, EventSink: eventSink})
 	if err != nil {
 		return nil, 0, err
 	}
@@ -229,6 +229,7 @@ Run a Splunk search or reconnect to an existing Splunk search job.
 Examples:
   querysplunk -version
   querysplunk -validate-config search.yml
+  querysplunk -json-events -config search.yml
   querysplunk -job-sid 1258421375.19 -job-action status
   querysplunk -job-sid 1258421375.19 -job-action wait
   querysplunk -job-sid 1258421375.19 -job-action results -o results.json
@@ -274,6 +275,7 @@ func main() {
 	var showVersion bool
 	var jobID string
 	var jobAction string
+	var jsonEvents bool
 
 	log.SetFlags(0)
 	log.SetOutput(new(logWriter))
@@ -291,6 +293,7 @@ func main() {
 	flag.BoolVar(&showVersion, "version", false, "Print version and build metadata, then exit")
 	flag.StringVar(&jobID, "job-sid", "", "Use an existing Splunk search job ID")
 	flag.StringVar(&jobAction, "job-action", "", "Act on -job-sid: status, wait, results, search-log, or cancel")
+	flag.BoolVar(&jsonEvents, "json-events", false, "Write machine-readable lifecycle events as JSON Lines to stderr")
 	flag.BoolVar(&forceWrite, "force", false, "Allow -write-config to overwrite an existing file")
 	flag.StringVar(&queryFile, "q", "query.txt", "Read the SPL search from this plain text file")
 	flag.StringVar(&outputFile, "o", "splunkresults.json", "Write Splunk results to this file")
@@ -299,15 +302,23 @@ func main() {
 		fmt.Println(versionString())
 		return
 	}
+	var eventSink splunk.EventSink
+	var jsonEventOutput *jsonEventSink
+	if jsonEvents {
+		jsonEventOutput = newJSONEventSink(os.Stderr)
+		eventSink = jsonEventOutput
+		log.SetOutput(io.Discard)
+	}
+
 	flagsSet := explicitFlags()
 	jobOptions := jobCLIOptions{Action: jobAction, JobID: jobID, OutputFile: outputFile, OutputExplicit: flagsSet["o"]}
 	jobMode, err := validateJobMode(jobOptions, flagsSet, configFile, validateConfigFile, writeConfigFile)
 	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
+		reportCLIError(os.Stderr, jsonEventOutput, "arguments", err)
 		os.Exit(2)
 	}
 	if err := validateConfigModes(configFile, validateConfigFile, writeConfigFile); err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
+		reportCLIError(os.Stderr, jsonEventOutput, "arguments", err)
 		os.Exit(2)
 	}
 
@@ -337,26 +348,26 @@ func main() {
 		}
 		return
 	}
-
 	if useEnvFile {
 		if err := godotenv.Load(); err != nil {
-			log.Fatal("ERROR: could not load .env file")
+			reportCLIError(os.Stderr, jsonEventOutput, "environment", errors.New("could not load .env file"))
+			os.Exit(1)
 		}
 	}
 	if jobMode {
 		if appContext == "" {
 			appContext = os.Getenv("SPLUNKAPP")
 		}
-		client, timeout, err := newSplunkClientFromEnvironment(appContext, nil)
+		client, timeout, err := newSplunkClientFromEnvironment(appContext, nil, eventSink)
 		if err != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
+			reportCLIError(os.Stderr, jsonEventOutput, "configure", err)
 			os.Exit(1)
 		}
 		defer client.Close()
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 		if err := runJobAction(ctx, client, jobOptions, os.Stdout); err != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
+			reportCLIError(os.Stderr, jsonEventOutput, jobAction, err)
 			os.Exit(1)
 		}
 		return
@@ -367,7 +378,8 @@ func main() {
 		var err error
 		config, err = querypkg.LoadFile(configFile)
 		if err != nil {
-			log.Fatal(err)
+			reportCLIError(os.Stderr, jsonEventOutput, "configure", err)
+			os.Exit(1)
 		}
 		if !flagsSet["app"] {
 			appContext = config.App
@@ -386,7 +398,8 @@ func main() {
 		splunkQueryString, readErr := readSearchFile(queryFile)
 		err = readErr
 		if err != nil {
-			log.Fatal(err)
+			reportCLIError(os.Stderr, jsonEventOutput, "configure", err)
+			os.Exit(1)
 		}
 		config = querypkg.Config{Search: splunkQueryString, OutputFile: outputFile}
 	}
@@ -416,25 +429,34 @@ func main() {
 			for _, finding := range violation.Findings {
 				log.Printf("WARN: %s", finding.Message)
 			}
-			log.Fatal("ERROR: search blocked by safety controls")
+			reportCLIError(os.Stderr, jsonEventOutput, "search", errors.New("search blocked by safety controls"))
+			os.Exit(1)
 		}
-		log.Fatal(err)
+		reportCLIError(os.Stderr, jsonEventOutput, "search", err)
+		os.Exit(1)
 	}
 	preparedConfig := prepared.Config()
-	client, timeout, err := newSplunkClientFromEnvironment(preparedConfig.App, slog.New(slog.NewTextHandler(new(logWriter), &slog.HandlerOptions{Level: slog.LevelInfo})))
+	var clientLogger *slog.Logger
+	if !jsonEvents {
+		clientLogger = slog.New(slog.NewTextHandler(new(logWriter), &slog.HandlerOptions{Level: slog.LevelInfo}))
+	}
+	client, timeout, err := newSplunkClientFromEnvironment(preparedConfig.App, clientLogger, eventSink)
 	if err != nil {
-		log.Fatalf("ERROR: Invalid Splunk configuration: %s", err)
+		reportCLIError(os.Stderr, jsonEventOutput, "configure", err)
+		os.Exit(1)
 	}
 	defer client.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	if err = client.Authenticate(ctx); err != nil {
-		log.Fatalf("ERROR: Couldn't login to Splunk: %s", err)
+		reportCLIError(os.Stderr, jsonEventOutput, "authenticate", err)
+		os.Exit(1)
 	}
 
 	if _, err = prepared.SearchToFile(ctx, client); err != nil {
-		log.Fatalf("ERROR: %s", err)
+		reportCLIError(os.Stderr, jsonEventOutput, "search", err)
+		os.Exit(1)
 	}
 
 	log.Print("SUCCESS: Query Completed")
