@@ -1,0 +1,12 @@
+app: search
+output_file: saved-search-definition.json
+mode: job
+search: |
+  | rest /servicesNS/-/search/saved/searches count=2 strict=true splunk_server=local search="title=\"Example Saved Search\""
+  | table title search disabled is_scheduled cron_schedule alert_type actions dispatch.earliest_time dispatch.latest_time eai:acl.app eai:acl.owner eai:acl.sharing
+results:
+  endpoint: auto
+  output_mode: json
+  count: 0
+diagnostics:
+  search_log: summary

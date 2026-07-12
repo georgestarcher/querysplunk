@@ -1,13 +1,15 @@
 ---
 name: querysplunk
-description: Safely install, upgrade, prepare, validate, execute, monitor, and resume Splunk searches with querysplunk YAML files or SPL input.
+description: Safely install, upgrade, prepare, validate, execute, monitor, resume, and inspect Splunk searches, knowledge objects, messages, macros, lookups, and configuration with querysplunk YAML files or SPL input.
 ---
 
 # querysplunk local assistant skill
 
 Use this skill when a user asks a local AI assistant to install or upgrade
 querysplunk, or to prepare, validate, run, monitor, inspect, or resume searches
-from SPL files or structured YAML configs.
+from SPL files or structured YAML configs. Also use it to inspect system
+messages, expand saved searches, resolve macros or lookups, and explain
+read-only Splunk REST dependencies.
 
 ## Installation and upgrades
 
@@ -44,6 +46,8 @@ use `query.UnsafeAllowAll()` without explicit user authorization.
 - Expect querysplunk to block explicit `index=*` searches unless `-allow-index-wildcard` or YAML `safety.allow_index_wildcard` is set.
 - Treat Splunk Cloud REST endpoint restrictions as possible permission or deployment constraints, not automatically as querysplunk bugs.
 - Do not run destructive or modifying SPL unless the user explicitly asks and confirms the risk.
+- Before constructing a `| rest` search or resolving a saved-search, macro, lookup, or configuration dependency, read `references/rest-inspection.md`.
+- Treat `| rest` as read-only GET inspection. Never improvise POST, DELETE, direct token-bearing `curl`, or arbitrary REST URLs.
 - Summarize result files carefully; avoid dumping large raw output into chat.
 
 ## Common commands
@@ -177,4 +181,5 @@ querysplunk -config search.yml
 - `references/spl-authoring.md`: Time-bounded SPL authoring and modifying-command safety.
 - `references/result-analysis.md`: Bounded, privacy-aware result and diagnostic summaries.
 - `references/health-diagnostics.md`: Safe selection, execution, and interpretation of health checks.
+- `references/rest-inspection.md`: Read-only REST endpoint selection, namespacing, dependency expansion, and mutation boundaries.
 - `templates/handoff.yml`: Non-sensitive state for continuing work in another session.

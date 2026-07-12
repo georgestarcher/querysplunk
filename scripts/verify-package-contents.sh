@@ -9,6 +9,11 @@ required_common=(
   "INSTALL.md"
   "examples/health/README.md"
   "examples/health/splunkd-health.yml"
+  "examples/rest/system-messages.yml"
+  "examples/rest/saved-search-definition.yml"
+  "examples/rest/macro-definitions.yml"
+  "examples/rest/lookup-definitions.yml"
+  "examples/rest/lookup-preview.yml"
   ".agents/skills/querysplunk/SKILL.md"
   ".agents/skills/querysplunk/references/yaml-config.md"
   ".agents/skills/querysplunk/references/live-integration.md"
@@ -18,13 +23,14 @@ required_common=(
   ".agents/skills/querysplunk/references/spl-authoring.md"
   ".agents/skills/querysplunk/references/result-analysis.md"
   ".agents/skills/querysplunk/references/health-diagnostics.md"
+  ".agents/skills/querysplunk/references/rest-inspection.md"
   ".agents/skills/querysplunk/templates/handoff.yml"
 )
 
 example_output_files=()
 while IFS= read -r output_file; do
   example_output_files+=("${output_file}")
-done < <(awk -F: '/^[[:space:]]*output_file:/ {gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); gsub(/^"|"$/, "", $2); print $2}' examples/health/*.yml)
+done < <(awk -F: '/^[[:space:]]*output_file:/ {gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); gsub(/^"|"$/, "", $2); print $2}' examples/health/*.yml examples/rest/*.yml)
 
 fail() {
   echo "ERROR: $*" >&2
@@ -38,9 +44,9 @@ check_forbidden_names() {
     echo "${listing}" >&2
     fail "${archive} contains local env or generated result artifacts"
   fi
-  if grep -Eq '^[^/]+/examples/health/.*\.json$' <<<"${listing}"; then
+  if grep -Eq '^[^/]+/examples/(health|rest)/.*\.json$' <<<"${listing}"; then
     echo "${listing}" >&2
-    fail "${archive} contains generated JSON under examples/health"
+    fail "${archive} contains generated JSON under examples"
   fi
   for output_file in "${example_output_files[@]}"; do
     if grep -Fq "/${output_file}" <<<"${listing}"; then

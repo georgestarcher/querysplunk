@@ -23,8 +23,9 @@ copy_bundle_files() {
   local goos="$2"
   cp README.md INSTALL.md "${package_dir}/"
   mkdir -p "${package_dir}/examples" "${package_dir}/.agents/skills"
-  mkdir -p "${package_dir}/examples/health"
+  mkdir -p "${package_dir}/examples/health" "${package_dir}/examples/rest"
   find examples/health -maxdepth 1 -type f \( -name '*.md' -o -name '*.yml' \) -exec cp {} "${package_dir}/examples/health/" \;
+  find examples/rest -maxdepth 1 -type f \( -name '*.md' -o -name '*.yml' \) -exec cp {} "${package_dir}/examples/rest/" \;
   cp -R .agents/skills/querysplunk "${package_dir}/.agents/skills/querysplunk"
   if [ "${goos}" = "windows" ]; then
     cp install.ps1 "${package_dir}/install.ps1"
