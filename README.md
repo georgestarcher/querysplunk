@@ -15,6 +15,30 @@ If you build from source, Go resolves these dependencies automatically:
 - https://github.com/joho/godotenv
 - https://gopkg.in/yaml.v3
 
+## Ways to use querysplunk
+
+Choose the workflow that fits what you are doing:
+
+- **Run a quick search from the command line.** Provide SPL directly or read it
+  from a plain text file, then write the Splunk response to disk.
+- **Save repeatable searches as YAML.** A YAML file can define the SPL, app
+  context, dispatch settings, result handling, safety acknowledgements, and
+  bounded `search.log` diagnostics. Validate it offline before contacting
+  Splunk, then run it interactively or in automation.
+- **Use it through an AI coding assistant.** Release bundles include the
+  querysplunk skill for Codex and Claude Code. The bundled installer can set up
+  both the command and skill, or you can ask your assistant to read the included
+  installation guide and perform the setup for you. The skill helps the agent
+  prepare safe YAML, request approval before execution, monitor jobs, resume by
+  SID, and summarize results without exposing credentials.
+- **Use it as a Go package.** Applications can use the same YAML schema, safety
+  checks, execution planning, job handling, and Splunk REST client without
+  invoking the command-line program.
+
+The easiest starting point is a prebuilt GitHub Release. It requires no Go
+toolchain or administrator access. See [Install a release](#install-a-release)
+for manual and AI-assisted installation.
+
 ## Use as a Go package
 
 Applications can load and safely prepare the same YAML used by the CLI:
