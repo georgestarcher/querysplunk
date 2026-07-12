@@ -66,39 +66,39 @@ var (
 
 // Config is the querysplunk YAML schema. Credentials never belong here.
 type Config struct {
-	App         string      `yaml:"app"`
-	OutputFile  string      `yaml:"output_file"`
-	Mode        string      `yaml:"mode"`
-	Search      string      `yaml:"search"`
-	Safety      Safety      `yaml:"safety"`
-	Dispatch    Dispatch    `yaml:"dispatch"`
-	Results     Results     `yaml:"results"`
-	Diagnostics Diagnostics `yaml:"diagnostics"`
+	App         string      `json:"app" yaml:"app"`
+	OutputFile  string      `json:"output_file" yaml:"output_file"`
+	Mode        string      `json:"mode" yaml:"mode"`
+	Search      string      `json:"search" yaml:"search"`
+	Safety      Safety      `json:"safety" yaml:"safety"`
+	Dispatch    Dispatch    `json:"dispatch" yaml:"dispatch"`
+	Results     Results     `json:"results" yaml:"results"`
+	Diagnostics Diagnostics `json:"diagnostics" yaml:"diagnostics"`
 }
 
 type Safety struct {
-	AllowOldEarliest   bool `yaml:"allow_old_earliest"`
-	AllowIndexWildcard bool `yaml:"allow_index_wildcard"`
+	AllowOldEarliest   bool `json:"allow_old_earliest" yaml:"allow_old_earliest"`
+	AllowIndexWildcard bool `json:"allow_index_wildcard" yaml:"allow_index_wildcard"`
 }
 
 type Dispatch struct {
-	EarliestTime   string   `yaml:"earliest_time"`
-	LatestTime     string   `yaml:"latest_time"`
-	MaxCount       *int     `yaml:"max_count"`
-	StatusBuckets  *int     `yaml:"status_buckets"`
-	RequiredFields []string `yaml:"required_fields"`
+	EarliestTime   string   `json:"earliest_time" yaml:"earliest_time"`
+	LatestTime     string   `json:"latest_time" yaml:"latest_time"`
+	MaxCount       *int     `json:"max_count" yaml:"max_count"`
+	StatusBuckets  *int     `json:"status_buckets" yaml:"status_buckets"`
+	RequiredFields []string `json:"required_fields" yaml:"required_fields"`
 }
 
 type Results struct {
-	OutputMode string `yaml:"output_mode"`
-	Count      *int   `yaml:"count"`
-	Offset     *int   `yaml:"offset"`
-	Endpoint   string `yaml:"endpoint"`
+	OutputMode string `json:"output_mode" yaml:"output_mode"`
+	Count      *int   `json:"count" yaml:"count"`
+	Offset     *int   `json:"offset" yaml:"offset"`
+	Endpoint   string `json:"endpoint" yaml:"endpoint"`
 }
 
 type Diagnostics struct {
-	SearchLog     string `yaml:"search_log"`
-	SearchLogFile string `yaml:"search_log_file"`
+	SearchLog     string `json:"search_log" yaml:"search_log"`
+	SearchLogFile string `json:"search_log_file" yaml:"search_log_file"`
 }
 
 // Overrides are applied after loading and before safety analysis. Nil pointers
@@ -139,9 +139,18 @@ const (
 
 // Finding is a warning, blocking violation, or explicit acknowledgement.
 type Finding struct {
-	Kind     string
-	Severity FindingSeverity
-	Message  string
+	Kind     string          `json:"kind" yaml:"kind"`
+	Severity FindingSeverity `json:"severity" yaml:"severity"`
+	Message  string          `json:"message" yaml:"message"`
+}
+
+// Plan is the deterministic, credential-free description of a prepared query.
+// Valid is false when Findings contains a blocking safety violation. Successful
+// offline validation does not prove Splunk authorization or execution.
+type Plan struct {
+	Valid    bool      `json:"valid" yaml:"valid"`
+	Config   Config    `json:"config" yaml:"config"`
+	Findings []Finding `json:"findings" yaml:"findings"`
 }
 
 // ViolationError contains every blocking finding from one Prepare call.
@@ -371,6 +380,31 @@ func (config Config) SearchOptions() (splunk.SearchOptions, error) {
 func (prepared Prepared) Config() Config                { return cloneConfig(prepared.config) }
 func (prepared Prepared) Options() splunk.SearchOptions { return cloneOptions(prepared.options) }
 func (prepared Prepared) Findings() []Finding           { return append([]Finding(nil), prepared.findings...) }
+
+// Plan returns a detached effective configuration and its safety findings.
+// Derived settings, such as a default search.log filename, are made explicit.
+func (prepared Prepared) Plan() Plan {
+	config := prepared.Config()
+	if config.Diagnostics.SearchLogFile == "" {
+		config.Diagnostics.SearchLogFile = prepared.options.SearchLogFile
+	}
+	findings := prepared.Findings()
+	valid := config.Validate() == nil && len(findingsBySeverity(findings, SeverityViolation)) == 0
+	return Plan{Valid: valid, Config: config, Findings: findings}
+}
+
+// EncodeYAML writes the plan as one stable YAML document.
+func (plan Plan) EncodeYAML(writer io.Writer) error {
+	if writer == nil {
+		return fmt.Errorf("%w: plan output writer is required", ErrInvalidConfig)
+	}
+	encoder := yaml.NewEncoder(writer)
+	if err := encoder.Encode(plan); err != nil {
+		_ = encoder.Close()
+		return err
+	}
+	return encoder.Close()
+}
 
 func (prepared Prepared) Search(ctx context.Context, client *splunk.Client) (splunk.Result, error) {
 	if client == nil {

@@ -31,6 +31,10 @@ explicit `index=*`. Prefer per-risk acknowledgements in YAML or
 `query.Overrides`; `query.UnsafeAllowAll()` is an intentionally conspicuous
 escape hatch and must not be used for untrusted searches.
 
+`Prepared.Plan` returns the same credential-free effective configuration and
+structured findings used by the CLI's offline `-validate-config` mode. Go
+consumers can inspect that plan before choosing whether to execute it.
+
 Prepared queries provide buffered `Search`, streaming `SearchTo`, and atomic
 `SearchToFile` execution. Inspect warnings, violations, and acknowledgements
 through `query.Finding`; `errors.Is` and `errors.As` work with
@@ -209,6 +213,32 @@ dispatch parameters, result parameters, or search log diagnostics.
 ```bash
 querysplunk -config search.yml
 ```
+
+### Validate a YAML config offline
+
+Validate schema, defaults, explicit CLI overrides, and safety policy without
+credentials or a Splunk connection:
+
+```bash
+querysplunk -validate-config search.yml
+```
+
+The command writes a deterministic YAML execution plan to standard output. The
+plan contains `valid`, the effective credential-free `config`, and structured
+`findings`. Blocking safety findings produce `valid: false` and a nonzero exit;
+warnings and explicitly acknowledged risks remain successful. The normal
+`-app`, `-o`, `-earliest`, `-latest`, and safety acknowledgement flags are
+applied before validation.
+
+Offline validation never loads `.env`, reads Splunk credentials, or contacts
+Splunk. If YAML omits `app`, an already-exported `SPLUNKAPP` is included so the
+plan matches normal execution; `-app` takes precedence. A successful plan
+verifies querysplunk configuration and safety only; it does not prove Splunk
+authorization, app visibility, SPL semantics, or live execution.
+
+Exit status is `0` for a valid plan, `1` for invalid configuration or a blocked
+search, and `2` for conflicting CLI modes. Validation errors are written to
+standard error so standard output remains parseable YAML.
 
 ### Generate a YAML skeleton
 
@@ -399,6 +429,7 @@ Run a Splunk search from a plain SPL file or from a structured YAML config.
 
 Examples:
   querysplunk -version
+  querysplunk -validate-config search.yml
   querysplunk -q query.txt -o splunkresults.json
   querysplunk -q query.txt -earliest=-15m -latest=now
   querysplunk -config search.yml
@@ -439,6 +470,8 @@ Options:
     	Write Splunk results to this file (default "splunkresults.json")
   -q string
     	Read the SPL search from this plain text file (default "query.txt")
+  -validate-config string
+	Validate a YAML search config offline and print its effective plan
   -version
 	Print version and build metadata, then exit
   -write-config string
