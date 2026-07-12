@@ -84,6 +84,39 @@ lookup rows. To inspect CSV or KV lookup contents, use a separately approved,
 bounded search such as `| inputlookup <name> | head 100` and return only needed
 fields. Never use `outputlookup` for inspection.
 
+## Check for schedule overlap
+
+When a scheduled saved search appears late or skipped, use its configuration
+and recent job history together:
+
+1. Start with `examples/health/scheduler-health.yml`. Its bounded scheduler
+   search groups recent statuses by saved search, app, and user, making skipped
+   or unhealthy execution patterns visible before deeper inspection.
+2. Retain `cron_schedule`, dispatch bounds, scheduling state, and actions from
+   the saved-search definition.
+3. Inspect a small number of its most recent jobs and identify the relevant
+   SID, dispatch time, final state, and available run-duration fields.
+4. Use querysplunk SID recovery to fetch the job status and bounded
+   `search.log` diagnostics without redispatching the search:
+
+   ```bash
+   querysplunk -job-sid <sid> -job-action status
+   querysplunk -job-sid <sid> -job-action search-log
+   ```
+
+5. Compare the measured execution duration with the interval implied by the
+   cron expression. Execution time that regularly meets or exceeds that
+   interval is a strong schedule-overlap risk and can contribute to skipped
+   executions.
+6. Correlate the duration with skipped statuses from the scheduler-health
+   result. Do not claim overlap is the confirmed cause from duration alone. Also check
+   scheduler warnings, concurrency limits, schedule windows, workload rules,
+   and the saved search final state. Surface relevant warnings from the bounded
+   search log without dumping the complete log.
+
+Never dispatch the saved search again merely to obtain diagnostics when a
+recent SID is available.
+
 ## Example selection
 
 - `examples/rest/system-messages.yml`: bounded system-message review.
