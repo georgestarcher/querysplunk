@@ -284,6 +284,30 @@ and a non-sensitive session handoff template. These playbooks tell an agent when
 to retry, when to resume by SID, and when to stop for user correction instead of
 blindly redispatching searches.
 
+The skill includes two bounded scheduled-search analysis workflows. Ask the
+assistant naturally:
+
+> Find failed scheduled searches whose job logs are still available and
+> explain the failures.
+
+Or:
+
+> Profile successful scheduled searches that are close to overrunning their
+> observed schedule interval and explain the bottlenecks.
+
+The first workflow correlates recent failed scheduler records with Splunk's
+retained-job inventory before retrieving `search.log`. The second compares
+successful job runtimes with the observed gap between adjacent scheduled
+executions. It reports overlap risk rather than claiming that runtime alone
+caused a skipped execution. Both workflows use explicit time bounds, limit the
+number and size of logs analyzed, redact likely credentials, and avoid
+redispatching saved searches merely to obtain diagnostics.
+
+These advanced templates require permission to search `_internal`, read-only
+access to Splunk's search-job REST endpoints, and a configured Splunk `ai`
+command with a default model. If `ai` is unavailable, the bundled skill explains
+how to return bounded log excerpts for local assistant analysis instead.
+
 Splunk connection values remain environment configuration. See
 [Configuration environment](#configuration-environment) before the first live
 search.
