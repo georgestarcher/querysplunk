@@ -1,0 +1,35 @@
+app: Splunk_ML_Toolkit
+output_file: recent-search-job-failures.json
+mode: job
+search: |
+  search index=_internal source=*scheduler.log status="failed" sid=*
+  | where match(sid, "^[A-Za-z0-9_.-]+$")
+  | join type=inner sid [
+      | rest /services/search/jobs splunk_server=local strict=true count=500
+      | where isDone=1
+      | fields sid
+    ]
+  | sort 0 - _time
+  | dedup app savedsearch_name
+  | head 10
+  | fields sid
+  | map maxsearches=10 search="| rest /services/search/jobs/$sid$/search.log splunk_server=local strict=true | eval sid=\"$sid$\" | eval log_line=split(value, \"\\n\") | mvexpand log_line | where match(log_line, \"(?i)ERROR|WARN|FATAL|exception|failed|failure|cancel|timeout|quota|permission|denied|dispatch|peer|command\") | rex mode=sed field=log_line \"s/[\\r\\n]+/ /g\" | stats list(log_line) AS log_parts BY sid"
+  | eval log_text=mvjoin(log_parts, "\n")
+  | rex mode=sed field=log_text "s/(?i)(authorization: bearer|bearer|token|password|secret)[=: ]+[^ ,;\\r\\n]+/\1=[REDACTED]/g"
+  | eval log_text=substr(log_text, 1, 30000)
+  | join type=left sid [
+      search index=_internal source=*scheduler.log status="failed" sid=*
+      | stats latest(_time) AS failure_epoch latest(app) AS app latest(savedsearch_name) AS savedsearch_name latest(reason) AS scheduler_reason latest(run_time) AS runtime_seconds BY sid
+    ]
+  | eval failure_time=strftime(failure_epoch, "%Y-%m-%d %H:%M:%S %Z")
+  | ai prompt="Analyze this failed Splunk scheduled-search job. Identify the most likely failure cause using only the supplied evidence, quote concise supporting log details, distinguish confirmed facts from inference, and give practical remediation and verification steps. Scheduler reason: {scheduler_reason}. Search log excerpts: {log_text}"
+  | table failure_time app savedsearch_name sid runtime_seconds scheduler_reason ai_result_1
+dispatch:
+  earliest_time: "-24h"
+  latest_time: "now"
+results:
+  endpoint: auto
+  output_mode: json
+  count: 0
+diagnostics:
+  search_log: summary
