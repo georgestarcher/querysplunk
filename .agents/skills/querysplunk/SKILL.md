@@ -1,6 +1,6 @@
 ---
 name: querysplunk
-description: Safely install, upgrade, prepare, validate, execute, monitor, resume, and inspect Splunk searches, knowledge objects, messages, macros, lookups, and configuration with querysplunk YAML files or SPL input.
+description: Safely install, upgrade, prepare, validate, execute, monitor, resume, and inspect Splunk searches, scheduled-search failures, long-running scheduled searches, knowledge objects, messages, macros, lookups, and configuration with querysplunk YAML files or SPL input.
 ---
 
 # querysplunk local assistant skill
@@ -133,6 +133,16 @@ user-maintained health checks, follow `references/health-diagnostics.md`. If a
 job may outlive the current session, record only non-sensitive state using
 `templates/handoff.yml`.
 
+When a user asks to check a saved search for recent job failures, follow
+`references/scheduler-job-failures.md`. Use the exact saved-search name and do
+not infer success from an empty scheduler history.
+
+When a user asks to find failed searches with available logs or profile
+successful searches that may overrun their schedules, follow
+`references/scheduled-search-log-analysis.md`. Prefer retained SIDs over
+redispatching searches, preserve the templates' analysis caps, and distinguish
+measured log evidence from AI inference.
+
 For embedded Go workflows, use `query.LoadFile`, apply explicit
 `query.Overrides`, call `query.Prepare`, inspect `Prepared.Plan` or typed
 findings, and then call
@@ -181,5 +191,9 @@ querysplunk -config search.yml
 - `references/spl-authoring.md`: Time-bounded SPL authoring and modifying-command safety.
 - `references/result-analysis.md`: Bounded, privacy-aware result and diagnostic summaries.
 - `references/health-diagnostics.md`: Safe selection, execution, and interpretation of health checks.
+- `references/scheduler-job-failures.md`: Check one saved search across all apps for recent failed, skipped, or otherwise non-successful scheduler runs.
+- `references/scheduled-search-log-analysis.md`: Profile long-running successful jobs and diagnose failed jobs whose `search.log` is retained.
 - `references/rest-inspection.md`: Read-only REST endpoint selection, namespacing, dependency expansion, and mutation boundaries.
+- `templates/recent-search-job-failures.yml`: Analyze recent failed scheduled jobs whose `search.log` is retained.
+- `templates/long-running-successful-searches.yml`: Profile successful scheduled jobs that approach or exceed their observed schedule gap.
 - `templates/handoff.yml`: Non-sensitive state for continuing work in another session.

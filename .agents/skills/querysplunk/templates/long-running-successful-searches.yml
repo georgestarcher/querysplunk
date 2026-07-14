@@ -1,0 +1,46 @@
+app: Splunk_ML_Toolkit
+output_file: long-running-successful-searches.json
+mode: job
+search: |
+  search index=_internal source=*scheduler.log
+  | eval scheduled_epoch=coalesce(scheduled_time, _time), runtime_seconds=coalesce(run_time, execution_time, duration)
+  | sort 0 app savedsearch_name scheduled_epoch
+  | streamstats current=f last(scheduled_epoch) AS previous_scheduled_epoch BY app savedsearch_name
+  | eval observed_gap_seconds=scheduled_epoch-previous_scheduled_epoch
+  | where status="success" AND runtime_seconds>0 AND observed_gap_seconds>0 AND match(sid, "^[A-Za-z0-9_.-]+$")
+  | eval runtime_percent_of_gap=round(100*runtime_seconds/observed_gap_seconds, 1)
+  | where runtime_percent_of_gap>=80
+  | join type=inner sid [
+      | rest /services/search/jobs splunk_server=local strict=true count=500
+      | where isDone=1
+      | fields sid
+    ]
+  | sort 0 - runtime_percent_of_gap - runtime_seconds
+  | dedup app savedsearch_name
+  | head 5
+  | fields sid
+  | map maxsearches=5 search="| rest /services/search/jobs/$sid$/search.log splunk_server=local strict=true | eval sid=\"$sid$\" | eval log_line=split(value, \"\\n\") | mvexpand log_line | where match(log_line, \"(?i)runDuration|duration|elapsed|performance|phase|remoteSearch|WARN|ERROR|FATAL|timeout|scanCount|eventCount|resultCount|command|subsearch|peer|bundle|finalize|wait|queue|executor\") | rex mode=sed field=log_line \"s/[\\r\\n]+/ /g\" | stats list(log_line) AS log_parts BY sid"
+  | eval log_text=mvjoin(log_parts, "\n")
+  | rex mode=sed field=log_text "s/(?i)(authorization: bearer|bearer|token|password|secret)[=: ]+[^ ,;\\r\\n]+/\1=[REDACTED]/g"
+  | eval log_text=substr(log_text, 1, 30000)
+  | join type=left sid [
+      search index=_internal source=*scheduler.log
+      | eval scheduled_epoch=coalesce(scheduled_time, _time), runtime_seconds=coalesce(run_time, execution_time, duration)
+      | sort 0 app savedsearch_name scheduled_epoch
+      | streamstats current=f last(scheduled_epoch) AS previous_scheduled_epoch BY app savedsearch_name
+      | eval observed_gap_seconds=scheduled_epoch-previous_scheduled_epoch
+      | where status="success" AND runtime_seconds>0 AND observed_gap_seconds>0 AND match(sid, "^[A-Za-z0-9_.-]+$")
+      | eval runtime_percent_of_gap=round(100*runtime_seconds/observed_gap_seconds, 1)
+      | fields sid app savedsearch_name runtime_seconds observed_gap_seconds runtime_percent_of_gap
+    ]
+  | ai prompt="In no more than 350 words, profile this successful Splunk scheduled-search job. Scheduler runtime: {runtime_seconds} seconds. Observed gap from the preceding scheduled execution: {observed_gap_seconds} seconds. Runtime is {runtime_percent_of_gap}% of that gap. Separate overall wall-clock runtime from component timings and never add overlapping timings. Identify evidence-backed bottlenecks, warnings, expensive commands, waiting, and practical next steps. Explain whether the evidence indicates schedule-overlap risk, but do not claim overlap caused skipped jobs without scheduler evidence. Clearly label inference. Search log excerpts: {log_text}"
+  | table app savedsearch_name sid runtime_seconds observed_gap_seconds runtime_percent_of_gap ai_result_1
+dispatch:
+  earliest_time: "-24h"
+  latest_time: "now"
+results:
+  endpoint: auto
+  output_mode: json
+  count: 0
+diagnostics:
+  search_log: summary
