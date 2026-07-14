@@ -570,12 +570,12 @@ Run one with:
 querysplunk -config examples/health/splunkd-health.yml
 ```
 
-Read-only administration and knowledge-object diagnostics are available in
-`examples/rest/`. For example, find visible scheduled searches that Splunk
-marks as having no valid owner:
+Operational administration diagnostics are available alongside the other
+health checks in `examples/health/`. For example, find visible scheduled
+searches that Splunk marks as having no valid owner:
 
 ```bash
-querysplunk -config examples/rest/orphaned-scheduled-searches.yml
+querysplunk -config examples/health/orphaned-scheduled-searches.yml
 ```
 
 That example uses Splunk's `add_orphan_field=true` saved-search REST parameter,
@@ -583,6 +583,9 @@ returns simple `app` and `owner` fields, and includes schedule, enabled-state,
 alert-type, action, and next-run context. Cross-app visibility depends on the
 calling Splunk role. The search is read-only and does not reassign, disable, or
 delete knowledge objects.
+
+Lower-level knowledge-object inspection examples remain in `examples/rest/`,
+including saved-search definitions, macros, and lookup metadata or previews.
 
 ## Search job lifecycle and diagnostics
 
