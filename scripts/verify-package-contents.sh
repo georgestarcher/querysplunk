@@ -11,6 +11,7 @@ required_common=(
   "examples/health/splunkd-health.yml"
   "examples/rest/system-messages.yml"
   "examples/rest/saved-search-definition.yml"
+  "examples/rest/orphaned-scheduled-searches.yml"
   "examples/rest/macro-definitions.yml"
   "examples/rest/lookup-definitions.yml"
   "examples/rest/lookup-preview.yml"

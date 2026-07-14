@@ -295,8 +295,9 @@ Or:
 > Profile successful scheduled searches that are close to overrunning their
 > observed schedule interval and explain the bottlenecks.
 
-The first workflow correlates recent failed scheduler records with Splunk's
-retained-job inventory before retrieving `search.log`. The second compares
+The first workflow correlates recent unsuccessful scheduler records that have a
+SID with Splunk's retained-job inventory before retrieving `search.log`. It
+does not suppress scheduler error messages by default. The second compares
 successful job runtimes with the observed gap between adjacent scheduled
 executions. It reports overlap risk rather than claiming that runtime alone
 caused a skipped execution. Both workflows use explicit time bounds, limit the
@@ -568,6 +569,20 @@ Run one with:
 ```bash
 querysplunk -config examples/health/splunkd-health.yml
 ```
+
+Read-only administration and knowledge-object diagnostics are available in
+`examples/rest/`. For example, find visible scheduled searches that Splunk
+marks as having no valid owner:
+
+```bash
+querysplunk -config examples/rest/orphaned-scheduled-searches.yml
+```
+
+That example uses Splunk's `add_orphan_field=true` saved-search REST parameter,
+returns simple `app` and `owner` fields, and includes schedule, enabled-state,
+alert-type, action, and next-run context. Cross-app visibility depends on the
+calling Splunk role. The search is read-only and does not reassign, disable, or
+delete knowledge objects.
 
 ## Search job lifecycle and diagnostics
 

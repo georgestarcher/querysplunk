@@ -126,11 +126,35 @@ and recent job history together:
 Never dispatch the saved search again merely to obtain diagnostics when a
 recent SID is available.
 
+## Find orphaned scheduled searches
+
+When a user asks for scheduled searches, reports, or alerts without a valid
+owner, start from `examples/rest/orphaned-scheduled-searches.yml`.
+
+The saved-search collection endpoint does not return orphan status by default.
+Pass `add_orphan_field=true` and use the returned `orphan` field; `orphan=1`
+means Splunk determined that the saved search has no valid owner. Do not infer
+orphan status merely by comparing an owner string with a partial user list.
+
+Use `/servicesNS/-/-/saved/searches` only when cross-app discovery is required.
+Apply endpoint-side `search="orphan=1"` and `search="is_scheduled=1"` filters
+before a finite count, then retain the local `where` check as defense in depth.
+Rename `eai:acl.app` and `eai:acl.owner` to `app` and `owner`, and return
+schedule, enabled state, alert type, actions, and next-run context. Treat the
+results as potentially sensitive and do not change ownership, scheduling,
+enabled state, or ACLs without a separately approved modifying operation.
+
+An empty result means no visible scheduled saved search was marked orphaned. It
+does not prove that the deployment has none: the caller can see only knowledge
+objects allowed by its Splunk role and namespace access.
+
 ## Example selection
 
 - `examples/rest/system-messages.yml`: bounded system-message review.
 - `examples/rest/saved-search-definition.yml`: locate saved-search SPL and
   execution metadata.
+- `examples/rest/orphaned-scheduled-searches.yml`: find visible scheduled saved
+  searches that Splunk marks as lacking a valid owner.
 - `examples/rest/macro-definitions.yml`: inspect app-scoped macro stanzas.
 - `examples/rest/lookup-definitions.yml`: inspect lookup metadata.
 - `examples/rest/lookup-preview.yml`: preview bounded lookup content when REST

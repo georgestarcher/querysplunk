@@ -1,6 +1,6 @@
 ---
 name: querysplunk
-description: Safely install, upgrade, prepare, validate, execute, monitor, resume, and inspect Splunk searches, scheduled-search failures, long-running scheduled searches, knowledge objects, messages, macros, lookups, and configuration with querysplunk YAML files or SPL input.
+description: Safely install, upgrade, prepare, validate, execute, monitor, resume, and inspect Splunk searches, scheduled-search failures, long-running and orphaned scheduled searches, knowledge objects, messages, macros, lookups, and configuration with querysplunk YAML files or SPL input.
 ---
 
 # querysplunk local assistant skill
