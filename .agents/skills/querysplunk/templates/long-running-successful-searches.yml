@@ -2,13 +2,12 @@ app: Splunk_ML_Toolkit
 output_file: long-running-successful-searches.json
 mode: job
 search: |
-  search index=_internal source=*scheduler.log status="success" sid=*
+  search index=_internal source=*scheduler.log
   | eval scheduled_epoch=coalesce(scheduled_time, _time), runtime_seconds=coalesce(run_time, execution_time, duration)
-  | where runtime_seconds>0 AND match(sid, "^[A-Za-z0-9_.-]+$")
   | sort 0 app savedsearch_name scheduled_epoch
   | streamstats current=f last(scheduled_epoch) AS previous_scheduled_epoch BY app savedsearch_name
   | eval observed_gap_seconds=scheduled_epoch-previous_scheduled_epoch
-  | where observed_gap_seconds>0
+  | where status="success" AND runtime_seconds>0 AND observed_gap_seconds>0 AND match(sid, "^[A-Za-z0-9_.-]+$")
   | eval runtime_percent_of_gap=round(100*runtime_seconds/observed_gap_seconds, 1)
   | where runtime_percent_of_gap>=80
   | join type=inner sid [
@@ -25,13 +24,12 @@ search: |
   | rex mode=sed field=log_text "s/(?i)(authorization: bearer|bearer|token|password|secret)[=: ]+[^ ,;\\r\\n]+/\1=[REDACTED]/g"
   | eval log_text=substr(log_text, 1, 30000)
   | join type=left sid [
-      search index=_internal source=*scheduler.log status="success" sid=*
+      search index=_internal source=*scheduler.log
       | eval scheduled_epoch=coalesce(scheduled_time, _time), runtime_seconds=coalesce(run_time, execution_time, duration)
-      | where runtime_seconds>0
       | sort 0 app savedsearch_name scheduled_epoch
       | streamstats current=f last(scheduled_epoch) AS previous_scheduled_epoch BY app savedsearch_name
       | eval observed_gap_seconds=scheduled_epoch-previous_scheduled_epoch
-      | where observed_gap_seconds>0
+      | where status="success" AND runtime_seconds>0 AND observed_gap_seconds>0 AND match(sid, "^[A-Za-z0-9_.-]+$")
       | eval runtime_percent_of_gap=round(100*runtime_seconds/observed_gap_seconds, 1)
       | fields sid app savedsearch_name runtime_seconds observed_gap_seconds runtime_percent_of_gap
     ]

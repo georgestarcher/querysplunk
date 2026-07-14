@@ -50,10 +50,12 @@ asks:
 - "Explain why successful scheduled searches are slow."
 
 The template calculates the gap between adjacent observed scheduler executions
-for each `(app, savedsearch_name)` pair. It flags successful jobs whose runtime
-is at least 80 percent of that gap, intersects them with retained jobs, keeps the
-highest-risk run for up to five unique searches, and asks `ai` to analyze each
-log.
+across all outcomes for each `(app, savedsearch_name)` pair, then selects
+successful jobs for profiling. This prevents an intervening failed or skipped
+execution from inflating the apparent cadence. It flags successful jobs whose
+runtime is at least 80 percent of that gap, intersects them with retained jobs,
+keeps the highest-risk run for up to five unique searches, and asks `ai` to
+analyze each log.
 
 Call the comparison an **observed schedule gap**, not a parsed cron interval.
 Cron expressions can produce non-uniform gaps, scheduler history can be
