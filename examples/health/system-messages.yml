@@ -3,7 +3,7 @@ output_file: system-messages.json
 mode: job
 search: |
   | rest /services/messages count=100 strict=true splunk_server=local
-  | table title message severity server timeCreated_iso
+  | table title, message, severity, server, timeCreated_iso
 results:
   endpoint: auto
   output_mode: json

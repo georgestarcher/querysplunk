@@ -62,7 +62,7 @@ done
 unset SPLUNKBASEURL SPLUNKTOKEN SPLUNKUSERNAME SPLUNKPASSWORD SPLUNKAPP || true
 "$binary" -write-config "${tmp_dir}/generated.yml" >/dev/null 2>&1
 "$binary" -validate-config "${tmp_dir}/generated.yml" >"${tmp_dir}/generated-plan.yml"
-for config in examples/health/*.yml examples/rest/*.yml; do
+for config in examples/health/*.yml examples/rest/*.yml examples/detections/*.yml examples/pentest/*.yml; do
   "$binary" -validate-config "$config" >"${tmp_dir}/$(basename "$config").plan.yml"
 done
 
@@ -90,7 +90,7 @@ grep -F 'Resolve at most five levels' "${skill_dir}/references/rest-inspection.m
 grep -F 'complete stanza title including arity' "${skill_dir}/references/rest-inspection.md" >/dev/null || fail "REST inspection reference does not distinguish macro arity"
 grep -F 'Execution time that regularly meets or exceeds that' "${skill_dir}/references/rest-inspection.md" >/dev/null || fail "REST inspection reference is missing saved-search schedule-overlap guidance"
 grep -F 'examples/health/scheduler-health.yml' "${skill_dir}/references/rest-inspection.md" >/dev/null || fail "REST inspection reference does not connect overlap analysis to scheduler health"
-grep -F '| table title search disabled is_scheduled cron_schedule alert_type actions dispatch.earliest_time dispatch.latest_time eai:acl.app eai:acl.owner eai:acl.sharing' examples/rest/saved-search-definition.yml >/dev/null || fail "saved-search inspection is missing its bounded SPL, schedule, action, or namespace fields"
+grep -F '| table title, search, disabled, is_scheduled, cron_schedule, alert_type, actions, dispatch.earliest_time, dispatch.latest_time, eai:acl.app, eai:acl.owner, eai:acl.sharing' examples/rest/saved-search-definition.yml >/dev/null || fail "saved-search inspection is missing its bounded SPL, schedule, action, or namespace fields"
 grep -F 'add_orphan_field=true' examples/health/orphaned-scheduled-searches.yml >/dev/null || fail "orphaned-search inspection does not request Splunk orphan status"
 grep -F 'search="orphan=1" search="is_scheduled=1" count=100' examples/health/orphaned-scheduled-searches.yml >/dev/null || fail "orphaned-search inspection does not filter before its finite result bound"
 grep -F '| where orphan=1 AND is_scheduled=1' examples/health/orphaned-scheduled-searches.yml >/dev/null || fail "orphaned-search inspection does not select scheduled orphaned searches"
@@ -100,6 +100,24 @@ grep -F 'dedup app savedsearch_name scheduler_message' .agents/skills/querysplun
 grep -F '(authorization:[ ]*bearer|bearer|token|password|secret)[=: ]+' .agents/skills/querysplunk/templates/recent-search-job-failures.yml >/dev/null || fail "failed-job analysis is missing broad credential redaction before AI processing"
 grep -F '/configs/conf-macros count=2' examples/rest/macro-definitions.yml >/dev/null || fail "macro inspection does not use the filterable endpoint with ambiguity detection"
 grep -F '| inputlookup max=100 example_lookup' examples/rest/lookup-preview.yml >/dev/null || fail "lookup preview does not bound rows at inputlookup"
+grep -F '/services/storage/passwords count=0 splunk_server=local strict=true' examples/pentest/stored-credentials.yml >/dev/null || fail "pentest credential-store example does not use the documented local endpoint"
+grep -F '| table app, owner, sharing, realm, username, clear_password, encr_password' examples/pentest/stored-credentials.yml >/dev/null || fail "pentest credential-store example does not expose the documented credential fields"
+grep -F 'AUTHORIZED SECURITY TESTING ONLY' examples/pentest/stored-credentials.yml >/dev/null || fail "pentest credential-store example is missing its authorization warning"
+grep -F 'datamodel=Splunk_Audit.Search_Activity' examples/detections/sensitive-search-activity.yml >/dev/null || fail "sensitive-search detection does not use the audit Search_Activity dataset"
+grep -F 'datamodel=Splunk_Audit.Search_Activity' examples/detections/failed-search-activity.yml >/dev/null || fail "failed-search detection does not use the audit Search_Activity dataset"
+grep -F 'datamodel=Splunk_Audit.Web_Service_Errors' examples/health/audit-web-service-errors.yml >/dev/null || fail "web-service health search does not use the audit Web_Service_Errors dataset"
+grep -F 'datamodel=Splunk_Audit.Modular_Actions' examples/health/audit-failed-modular-actions.yml >/dev/null || fail "modular-action health search does not use the audit Modular_Actions dataset"
+grep -F 'BY src, app' examples/pentest/possible-password-paste-by-app.yml >/dev/null || fail "pentest password-paste app example does not correlate by source and app"
+grep -F 'BY src, dest' examples/pentest/possible-password-paste-by-dest.yml >/dev/null || fail "pentest password-paste destination example does not correlate by source and destination"
+for config in examples/pentest/possible-password-paste-by-app.yml examples/pentest/possible-password-paste-by-dest.yml; do
+  grep -F 'last(user) AS failed_user' "${config}" >/dev/null || fail "${config} does not preserve the failed username"
+  grep -F 'match(failed_user, "[^A-Za-z0-9]")' "${config}" >/dev/null || fail "${config} does not require a symbol in the failed username"
+  grep -F 'match(user, "^[A-Za-z0-9]+$")' "${config}" >/dev/null || fail "${config} does not require an alphanumeric successful username"
+  grep -F 'seconds_to_success<=300' "${config}" >/dev/null || fail "${config} does not bound the failure-to-success sequence"
+done
+if grep -REn '(first|last|earliest|latest)\((_time|[^)]*_epoch)\)' examples --include='*.yml' .agents/skills/querysplunk/templates --include='*.yml'; then
+  fail "YAML searches must use numeric min/max aggregation for epoch timestamps"
+fi
 for config in examples/health/system-messages.yml examples/health/orphaned-scheduled-searches.yml examples/rest/saved-search-definition.yml examples/rest/macro-definitions.yml examples/rest/lookup-definitions.yml; do
   grep -Eq '^[[:space:]]+\| (fields|table) ' "$config" || fail "$config does not project a bounded field set"
 done

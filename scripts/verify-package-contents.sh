@@ -11,10 +11,19 @@ required_common=(
   "examples/health/splunkd-health.yml"
   "examples/health/system-messages.yml"
   "examples/health/orphaned-scheduled-searches.yml"
+  "examples/health/audit-web-service-errors.yml"
+  "examples/health/audit-failed-modular-actions.yml"
   "examples/rest/saved-search-definition.yml"
   "examples/rest/macro-definitions.yml"
   "examples/rest/lookup-definitions.yml"
   "examples/rest/lookup-preview.yml"
+  "examples/pentest/README.md"
+  "examples/pentest/stored-credentials.yml"
+  "examples/pentest/possible-password-paste-by-app.yml"
+  "examples/pentest/possible-password-paste-by-dest.yml"
+  "examples/detections/README.md"
+  "examples/detections/sensitive-search-activity.yml"
+  "examples/detections/failed-search-activity.yml"
   ".agents/skills/querysplunk/SKILL.md"
   ".agents/skills/querysplunk/references/yaml-config.md"
   ".agents/skills/querysplunk/references/live-integration.md"
@@ -31,7 +40,7 @@ required_common=(
 example_output_files=()
 while IFS= read -r output_file; do
   example_output_files+=("${output_file}")
-done < <(awk -F: '/^[[:space:]]*output_file:/ {gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); gsub(/^"|"$/, "", $2); print $2}' examples/health/*.yml examples/rest/*.yml)
+done < <(awk -F: '/^[[:space:]]*output_file:/ {gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); gsub(/^"|"$/, "", $2); print $2}' examples/health/*.yml examples/rest/*.yml examples/detections/*.yml examples/pentest/*.yml)
 
 fail() {
   echo "ERROR: $*" >&2

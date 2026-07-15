@@ -1,0 +1,28 @@
+app: search
+output_file: audit-failed-modular-actions.json
+mode: job
+search: |
+  | tstats summariesonly=false fillnull_value="unknown"
+      count AS failure_count,
+      min(_time) AS first_seen_epoch,
+      max(_time) AS last_seen_epoch,
+      avg(Modular_Actions.duration) AS average_duration_ms,
+      max(Modular_Actions.duration) AS maximum_duration_ms
+      FROM datamodel=Splunk_Audit.Modular_Actions
+      WHERE Modular_Actions.action_status IN ("failure", "error")
+      BY Modular_Actions.app, Modular_Actions.action_name, Modular_Actions.action_mode, Modular_Actions.action_status, Modular_Actions.search_name, Modular_Actions.user, Modular_Actions.component, Modular_Actions.signature
+  | rename Modular_Actions.* AS *
+  | eval average_duration_ms=round(average_duration_ms, 2)
+  | sort 0 -last_seen_epoch
+  | head 200
+  | table first_seen_epoch, last_seen_epoch, failure_count, app, action_name, action_mode, action_status, search_name, user, component, signature, average_duration_ms, maximum_duration_ms
+dispatch:
+  earliest_time: "-24h"
+  latest_time: "now"
+results:
+  endpoint: auto
+  output_mode: json
+  count: 0
+  offset: 0
+diagnostics:
+  search_log: summary

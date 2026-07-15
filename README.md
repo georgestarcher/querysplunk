@@ -584,6 +584,21 @@ alert-type, action, and next-run context. Cross-app visibility depends on the
 calling Splunk role. The search is read-only and does not reassign, disable, or
 delete knowledge objects.
 
+Authorized penetration-testing examples are isolated in `examples/pentest/`.
+They can produce highly sensitive evidence, including app credentials returned
+by Splunk's stored-password endpoint and authentication username values that
+may actually be passwords. They are never routine health checks.
+Read `examples/pentest/README.md`, confirm explicit authorization, and prepare
+secure local evidence handling before running one. Do not paste their output
+into chat, issues, logs, or pull requests.
+
+Defender-oriented detections are available in `examples/detections/`. The
+initial collection uses the CIM Splunk Audit Logs data model to identify
+sensitive SPL execution and failed search activity. These are bounded
+investigative leads, not automatic proof of malicious activity. Failed modular
+actions and repeated Splunk Web service errors remain operational health checks
+under `examples/health/`.
+
 Lower-level knowledge-object inspection examples remain in `examples/rest/`,
 including saved-search definitions, macros, and lookup metadata or previews.
 

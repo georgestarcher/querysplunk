@@ -33,6 +33,8 @@ GitHub Actions environment secrets.
 | `resource-usage.yml` | CPU and memory resource status. | REST access to server status endpoints. |
 | `scheduler-health.yml` | Scheduled search status counts over the last day. | Search access to `_internal` scheduler events. |
 | `license-warnings.yml` | License-related warnings and messages. | Search access to `_internal`; availability varies in Splunk Cloud. |
+| `audit-web-service-errors.yml` | Repeated Splunk Web service errors over the last day. | CIM Splunk Audit Logs `Web_Service_Errors` dataset. |
+| `audit-failed-modular-actions.yml` | Failed or errored modular alert actions with duration context. | CIM Splunk Audit Logs `Modular_Actions` dataset. |
 
 ## Operational notes
 
@@ -46,5 +48,8 @@ GitHub Actions environment secrets.
   broader visibility would see none.
 - The examples use `mode: job` so normal job polling and `search.log`
   diagnostics remain available.
+- Audit-based examples require populated CIM Splunk Audit Logs datasets. Empty
+  results can indicate missing normalization or visibility rather than healthy
+  operation.
 - `results.count: 0` requests all returned rows for the search result set. Add
   a smaller count when you want a page of results.

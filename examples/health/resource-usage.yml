@@ -3,7 +3,7 @@ output_file: resource-usage.json
 mode: job
 search: |
   | rest /services/server/status/resource-usage
-  | table title cpu_* mem_* process_type instance
+  | table title, cpu_*, mem_*, process_type, instance
 results:
   endpoint: auto
   output_mode: json

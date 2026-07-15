@@ -5,7 +5,7 @@ search: |
   search index=_internal source=*scheduler.log
   | eval scheduled_epoch=coalesce(scheduled_time, _time), runtime_seconds=coalesce(run_time, execution_time, duration)
   | sort 0 app savedsearch_name scheduled_epoch
-  | streamstats current=f last(scheduled_epoch) AS previous_scheduled_epoch BY app savedsearch_name
+  | streamstats current=f max(scheduled_epoch) AS previous_scheduled_epoch BY app, savedsearch_name
   | eval observed_gap_seconds=scheduled_epoch-previous_scheduled_epoch
   | where status="success" AND runtime_seconds>0 AND observed_gap_seconds>0 AND match(sid, "^[A-Za-z0-9_.-]+$")
   | eval runtime_percent_of_gap=round(100*runtime_seconds/observed_gap_seconds, 1)
@@ -27,14 +27,14 @@ search: |
       search index=_internal source=*scheduler.log
       | eval scheduled_epoch=coalesce(scheduled_time, _time), runtime_seconds=coalesce(run_time, execution_time, duration)
       | sort 0 app savedsearch_name scheduled_epoch
-      | streamstats current=f last(scheduled_epoch) AS previous_scheduled_epoch BY app savedsearch_name
+      | streamstats current=f max(scheduled_epoch) AS previous_scheduled_epoch BY app, savedsearch_name
       | eval observed_gap_seconds=scheduled_epoch-previous_scheduled_epoch
       | where status="success" AND runtime_seconds>0 AND observed_gap_seconds>0 AND match(sid, "^[A-Za-z0-9_.-]+$")
       | eval runtime_percent_of_gap=round(100*runtime_seconds/observed_gap_seconds, 1)
-      | fields sid app savedsearch_name runtime_seconds observed_gap_seconds runtime_percent_of_gap
+      | fields sid, app, savedsearch_name, runtime_seconds, observed_gap_seconds, runtime_percent_of_gap
     ]
   | ai prompt="In no more than 350 words, profile this successful Splunk scheduled-search job. Scheduler runtime: {runtime_seconds} seconds. Observed gap from the preceding scheduled execution: {observed_gap_seconds} seconds. Runtime is {runtime_percent_of_gap}% of that gap. Separate overall wall-clock runtime from component timings and never add overlapping timings. Identify evidence-backed bottlenecks, warnings, expensive commands, waiting, and practical next steps. Explain whether the evidence indicates schedule-overlap risk, but do not claim overlap caused skipped jobs without scheduler evidence. Clearly label inference. Search log excerpts: {log_text}"
-  | table app savedsearch_name sid runtime_seconds observed_gap_seconds runtime_percent_of_gap ai_result_1
+  | table app, savedsearch_name, sid, runtime_seconds, observed_gap_seconds, runtime_percent_of_gap, ai_result_1
 dispatch:
   earliest_time: "-24h"
   latest_time: "now"

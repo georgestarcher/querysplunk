@@ -1,0 +1,25 @@
+app: search
+output_file: audit-web-service-errors.json
+mode: job
+search: |
+  | tstats summariesonly=false fillnull_value="unknown"
+      count AS error_count,
+      min(_time) AS first_seen_epoch,
+      max(_time) AS last_seen_epoch
+      FROM datamodel=Splunk_Audit.Web_Service_Errors
+      BY Web_Service_Errors.host, Web_Service_Errors.source, Web_Service_Errors.sourcetype, Web_Service_Errors.event_id
+  | rename Web_Service_Errors.* AS *
+  | where error_count>=5
+  | sort 0 -last_seen_epoch
+  | head 200
+  | table first_seen_epoch, last_seen_epoch, error_count, host, source, sourcetype, event_id
+dispatch:
+  earliest_time: "-24h"
+  latest_time: "now"
+results:
+  endpoint: auto
+  output_mode: json
+  count: 0
+  offset: 0
+diagnostics:
+  search_log: summary
