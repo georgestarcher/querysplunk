@@ -95,6 +95,9 @@ grep -F 'add_orphan_field=true' examples/health/orphaned-scheduled-searches.yml 
 grep -F 'search="orphan=1" search="is_scheduled=1" count=100' examples/health/orphaned-scheduled-searches.yml >/dev/null || fail "orphaned-search inspection does not filter before its finite result bound"
 grep -F '| where orphan=1 AND is_scheduled=1' examples/health/orphaned-scheduled-searches.yml >/dev/null || fail "orphaned-search inspection does not select scheduled orphaned searches"
 grep -F '| rename eai:acl.app AS app eai:acl.owner AS owner' examples/health/orphaned-scheduled-searches.yml >/dev/null || fail "orphaned-search inspection does not expose simple app and owner fields"
+grep -F 'scheduler_message=coalesce(errmsg, reason, "No scheduler message reported")' .agents/skills/querysplunk/templates/recent-search-job-failures.yml >/dev/null || fail "failed-job analysis does not normalize scheduler messages before deduplication"
+grep -F 'dedup app savedsearch_name scheduler_message' .agents/skills/querysplunk/templates/recent-search-job-failures.yml >/dev/null || fail "failed-job analysis does not preserve distinct normalized scheduler messages"
+grep -F '(authorization:[ ]*bearer|bearer|token|password|secret)[=: ]+' .agents/skills/querysplunk/templates/recent-search-job-failures.yml >/dev/null || fail "failed-job analysis is missing broad credential redaction before AI processing"
 grep -F '/configs/conf-macros count=2' examples/rest/macro-definitions.yml >/dev/null || fail "macro inspection does not use the filterable endpoint with ambiguity detection"
 grep -F '| inputlookup max=100 example_lookup' examples/rest/lookup-preview.yml >/dev/null || fail "lookup preview does not bound rows at inputlookup"
 for config in examples/health/system-messages.yml examples/health/orphaned-scheduled-searches.yml examples/rest/saved-search-definition.yml examples/rest/macro-definitions.yml examples/rest/lookup-definitions.yml; do

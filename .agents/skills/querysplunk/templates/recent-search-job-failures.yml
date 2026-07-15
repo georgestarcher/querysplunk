@@ -3,6 +3,7 @@ output_file: recent-search-job-failures.json
 mode: job
 search: |
   search index=_internal source=*scheduler.log (success=0 OR status="failed")
+  | eval scheduler_message=coalesce(errmsg, reason, "No scheduler message reported")
   | where match(sid, "^[A-Za-z0-9_.-]+$")
   | join type=inner sid [
       | rest /services/search/jobs splunk_server=local strict=true count=500
@@ -10,10 +11,10 @@ search: |
       | fields sid
     ]
   | sort 0 - _time
-  | dedup app savedsearch_name errmsg
+  | dedup app savedsearch_name scheduler_message
   | head 10
   | fields sid
-  | map maxsearches=10 search="| rest /services/search/jobs/$sid$/search.log splunk_server=local strict=true | eval sid=\"$sid$\" | stats list(value) AS log_parts BY sid | eval log_text=mvjoin(log_parts, \"\\n\") | rex mode=sed field=log_text \"s/(?i)(Authorization:[ ]*Bearer[ ]+)[^ ]+/\\1[REDACTED]/g\" | rex mode=sed field=log_text \"s/(?i)(token|password|secret)=([^ ,]+)/\\1=[REDACTED]/g\" | eval log_length=len(log_text) | eval log_text=if(log_length>24000,\"...[earlier search.log text omitted]...\\n\" . substr(log_text, log_length-23999, 24000),log_text) | eval _raw=log_text | addinfo"
+  | map maxsearches=10 search="| rest /services/search/jobs/$sid$/search.log splunk_server=local strict=true | eval sid=\"$sid$\" | stats list(value) AS log_parts BY sid | eval log_text=mvjoin(log_parts, \"\\n\") | rex mode=sed field=log_text \"s/(?i)(authorization:[ ]*bearer|bearer|token|password|secret)[=: ]+[^ ,;\\r\\n]+/\\1=[REDACTED]/g\" | eval log_length=len(log_text) | eval log_text=if(log_length>24000,\"...[earlier search.log text omitted]...\\n\" . substr(log_text, log_length-23999, 24000),log_text) | eval _raw=log_text | addinfo"
   | join type=left sid [
       search index=_internal source=*scheduler.log (success=0 OR status="failed") sid=*
       | eval scheduler_message=coalesce(errmsg, reason, "No scheduler message reported")
