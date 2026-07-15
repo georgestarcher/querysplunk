@@ -1,7 +1,7 @@
 # Splunk health check YAML examples
 
-These examples are starter YAML configs for common read-only Splunk health
-checks with `querysplunk`.
+These examples are starter YAML configs for common read-only Splunk health and
+operational administration checks with `querysplunk`.
 
 They are examples, not defaults. Review each search before using it in
 production, especially in Splunk Cloud where some REST endpoints and internal
@@ -25,6 +25,8 @@ GitHub Actions environment secrets.
 | --- | --- | --- |
 | `splunkd-health.yml` | Quick splunkd health summary. | REST access to server health endpoints. |
 | `splunkd-health-details.yml` | Feature-level splunkd health details. | REST access to server health endpoints. |
+| `system-messages.yml` | Current Splunk system messages and severity. | REST access to system messages. |
+| `orphaned-scheduled-searches.yml` | Enabled scheduled searches without a valid owner. | Cross-app saved-search REST visibility and permission to request orphan status. |
 | `internal-errors-warnings.yml` | Recent `_internal` warnings and errors. | Search access to `_internal`. |
 | `search-concurrency.yml` | Current search concurrency pressure. | REST access to server status endpoints. |
 | `disk-partitions.yml` | Disk and partition status. | REST access to server status endpoints. |
@@ -39,6 +41,9 @@ GitHub Actions environment secrets.
   these endpoints.
 - Splunk Cloud tenants may hide or restrict some server-status and license
   endpoints.
+- Cross-app administration results include only objects visible to the calling
+  role. An empty orphaned-search result does not prove an administrator with
+  broader visibility would see none.
 - The examples use `mode: job` so normal job polling and `search.log`
   diagnostics remain available.
 - `results.count: 0` requests all returned rows for the search result set. Add

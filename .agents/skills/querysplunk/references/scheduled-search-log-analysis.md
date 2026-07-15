@@ -29,14 +29,20 @@ Start from `../templates/recent-search-job-failures.yml` when the user asks:
 - "Explain recent saved-search failures."
 - "Use the job logs to identify why scheduled searches failed."
 
-The template examines a 24-hour scheduler window, keeps the latest failed job
-for each app and saved-search name, intersects those failures with the retained
-job inventory, and analyzes up to 10 logs. Add an exact `app` or
+The template examines a 24-hour scheduler window for failed jobs reported by
+either `success=0` or `status="failed"` and having a SID. Supporting both fields
+keeps the workflow compatible with scheduler formats observed across Splunk
+versions. It intersects those jobs with the retained-job inventory and keeps the latest
+analyzable job for each distinct app, saved-search name, and scheduler message,
+and analyzes up to 10 logs.
+It does not exclude scheduler messages by default; deployment-specific noise
+filters must be added deliberately so infrastructure failures are not silently
+hidden. Add an exact `app` or
 `savedsearch_name` predicate to the first scheduler search and its metadata
 subsearch when the user names a narrower target.
 
-An empty result means no failed scheduler record with an accessible retained
-log passed the filters. It does not prove there were no failures. Run the
+An empty result means no unsuccessful scheduler record with an accessible
+retained log passed the filters. It does not prove there were no failures. Run the
 lighter exact-name workflow in `scheduler-job-failures.md` when scheduler-only
 history is still useful.
 

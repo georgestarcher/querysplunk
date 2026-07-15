@@ -1,0 +1,15 @@
+app: search
+output_file: orphaned-scheduled-searches.json
+mode: job
+search: |
+  | rest /servicesNS/-/-/saved/searches add_orphan_field=true search="orphan=1" search="is_scheduled=1" count=100 strict=true splunk_server=local
+  | rename eai:acl.app AS app eai:acl.owner AS owner
+  | where orphan=1 AND is_scheduled=1
+  | table title app owner orphan disabled is_scheduled cron_schedule alert_type actions next_scheduled_time
+  | sort 0 app title
+results:
+  endpoint: auto
+  output_mode: json
+  count: 0
+diagnostics:
+  search_log: summary

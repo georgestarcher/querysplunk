@@ -91,9 +91,16 @@ grep -F 'complete stanza title including arity' "${skill_dir}/references/rest-in
 grep -F 'Execution time that regularly meets or exceeds that' "${skill_dir}/references/rest-inspection.md" >/dev/null || fail "REST inspection reference is missing saved-search schedule-overlap guidance"
 grep -F 'examples/health/scheduler-health.yml' "${skill_dir}/references/rest-inspection.md" >/dev/null || fail "REST inspection reference does not connect overlap analysis to scheduler health"
 grep -F '| table title search disabled is_scheduled cron_schedule alert_type actions dispatch.earliest_time dispatch.latest_time eai:acl.app eai:acl.owner eai:acl.sharing' examples/rest/saved-search-definition.yml >/dev/null || fail "saved-search inspection is missing its bounded SPL, schedule, action, or namespace fields"
+grep -F 'add_orphan_field=true' examples/health/orphaned-scheduled-searches.yml >/dev/null || fail "orphaned-search inspection does not request Splunk orphan status"
+grep -F 'search="orphan=1" search="is_scheduled=1" count=100' examples/health/orphaned-scheduled-searches.yml >/dev/null || fail "orphaned-search inspection does not filter before its finite result bound"
+grep -F '| where orphan=1 AND is_scheduled=1' examples/health/orphaned-scheduled-searches.yml >/dev/null || fail "orphaned-search inspection does not select scheduled orphaned searches"
+grep -F '| rename eai:acl.app AS app eai:acl.owner AS owner' examples/health/orphaned-scheduled-searches.yml >/dev/null || fail "orphaned-search inspection does not expose simple app and owner fields"
+grep -F 'scheduler_message=coalesce(errmsg, reason, "No scheduler message reported")' .agents/skills/querysplunk/templates/recent-search-job-failures.yml >/dev/null || fail "failed-job analysis does not normalize scheduler messages before deduplication"
+grep -F 'dedup app savedsearch_name scheduler_message' .agents/skills/querysplunk/templates/recent-search-job-failures.yml >/dev/null || fail "failed-job analysis does not preserve distinct normalized scheduler messages"
+grep -F '(authorization:[ ]*bearer|bearer|token|password|secret)[=: ]+' .agents/skills/querysplunk/templates/recent-search-job-failures.yml >/dev/null || fail "failed-job analysis is missing broad credential redaction before AI processing"
 grep -F '/configs/conf-macros count=2' examples/rest/macro-definitions.yml >/dev/null || fail "macro inspection does not use the filterable endpoint with ambiguity detection"
 grep -F '| inputlookup max=100 example_lookup' examples/rest/lookup-preview.yml >/dev/null || fail "lookup preview does not bound rows at inputlookup"
-for config in examples/rest/system-messages.yml examples/rest/saved-search-definition.yml examples/rest/macro-definitions.yml examples/rest/lookup-definitions.yml; do
+for config in examples/health/system-messages.yml examples/health/orphaned-scheduled-searches.yml examples/rest/saved-search-definition.yml examples/rest/macro-definitions.yml examples/rest/lookup-definitions.yml; do
   grep -Eq '^[[:space:]]+\| (fields|table) ' "$config" || fail "$config does not project a bounded field set"
 done
 
