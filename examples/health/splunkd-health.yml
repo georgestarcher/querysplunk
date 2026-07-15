@@ -3,7 +3,7 @@ output_file: splunkd-health.json
 mode: job
 search: |
   | rest /services/server/health/splunkd
-  | table title health status message
+  | table title, health, status, message
 results:
   endpoint: auto
   output_mode: json

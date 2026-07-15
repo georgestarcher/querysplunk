@@ -18,13 +18,13 @@ search: |
   | join type=left sid [
       search index=_internal source=*scheduler.log (success=0 OR status="failed") sid=*
       | eval scheduler_message=coalesce(errmsg, reason, "No scheduler message reported")
-      | stats latest(_time) AS failure_epoch latest(app) AS app latest(savedsearch_name) AS savedsearch_name latest(scheduler_message) AS errmsg latest(run_time) AS runtime_seconds BY sid
+      | stats max(_time) AS failure_epoch, latest(app) AS app, latest(savedsearch_name) AS savedsearch_name, latest(scheduler_message) AS errmsg, latest(run_time) AS runtime_seconds BY sid
     ]
   | eval failure_time=strftime(failure_epoch, "%Y-%m-%d %H:%M:%S %Z")
   | eval log_text=coalesce(log_text, errmsg)
   | ai prompt="Analyze the search.log for the unsuccessful Splunk scheduled search named {savedsearch_name} in app {app}. Identify the primary failure cause and cite the supporting components and messages. Distinguish the root cause from secondary warnings or cleanup activity. Recommend specific remediation and validation steps. If the evidence is insufficient, say so without inventing details. Scheduler message: {errmsg}. Search log: {log_text}"
   | eval throttle_key=sha256(app . "::" . savedsearch_name . "::" . coalesce(errmsg, ""))
-  | table failure_time app savedsearch_name sid runtime_seconds errmsg ai_result_1 throttle_key
+  | table failure_time, app, savedsearch_name, sid, runtime_seconds, errmsg, ai_result_1, throttle_key
   | sort 0 app savedsearch_name
 dispatch:
   earliest_time: "-24h"

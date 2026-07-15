@@ -1,0 +1,25 @@
+app: search
+output_file: detection-failed-search-activity.json
+mode: job
+search: |
+  | tstats summariesonly=false fillnull_value="unknown"
+      count AS failure_count,
+      min(_time) AS first_seen_epoch,
+      max(_time) AS last_seen_epoch
+      FROM datamodel=Splunk_Audit.Search_Activity
+      WHERE Search_Activity.info="failed"
+      BY Search_Activity.user, Search_Activity.host, Search_Activity.search_type, Search_Activity.source, Search_Activity.sourcetype, Search_Activity.search
+  | rename Search_Activity.* AS *
+  | sort 0 -last_seen_epoch
+  | head 200
+  | table first_seen_epoch, last_seen_epoch, failure_count, user, host, search_type, source, sourcetype, search
+dispatch:
+  earliest_time: "-24h"
+  latest_time: "now"
+results:
+  endpoint: auto
+  output_mode: json
+  count: 0
+  offset: 0
+diagnostics:
+  search_log: summary

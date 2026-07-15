@@ -3,7 +3,7 @@ output_file: scheduler-health.json
 mode: job
 search: |
   search index=_internal earliest=-24h sourcetype=scheduler
-  | stats count by status savedsearch_name app user
+  | stats count, min(_time) AS first_seen_epoch, max(_time) AS last_seen_epoch BY status, savedsearch_name, app, user
   | sort - count
 dispatch:
   earliest_time: "-24h"

@@ -39,6 +39,14 @@ use `query.UnsafeAllowAll()` without explicit user authorization.
 ## Safe operating rules
 
 - Never print `SPLUNKTOKEN`, `SPLUNKPASSWORD`, bearer tokens, authorization headers, or raw `.env` contents.
+- Never execute a file under `examples/pentest/` unless the user explicitly
+  confirms authorization for the target deployment and approves generation of
+  secret-bearing local results. Treat those results as credentials: do not
+  display, summarize, upload, or paste their values into chat. Report only the
+  result path, record count, masking state, and non-secret assessment outcome.
+- Treat raw results under `examples/detections/` as potentially sensitive audit
+  evidence. Summarize bounded findings without pasting complete SPL, private
+  object names, or unrestricted result bodies into chat.
 - Never add secrets to YAML configs.
 - Warn before running a search that has no apparent `earliest` or `latest` time bounds.
 - Prefer bounded searches using SPL time modifiers or YAML `dispatch.earliest_time` and `dispatch.latest_time`.

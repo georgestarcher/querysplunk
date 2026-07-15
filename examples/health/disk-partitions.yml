@@ -3,7 +3,7 @@ output_file: disk-partitions.json
 mode: job
 search: |
   | rest /services/server/status/partitions-space
-  | table title mount_point available capacity free total used
+  | table title, mount_point, available, capacity, free, total, used
 results:
   endpoint: auto
   output_mode: json
