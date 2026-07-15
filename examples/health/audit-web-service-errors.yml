@@ -5,14 +5,16 @@ search: |
   | tstats summariesonly=false fillnull_value="unknown"
       count AS error_count,
       min(_time) AS first_seen_epoch,
-      max(_time) AS last_seen_epoch
+      max(_time) AS last_seen_epoch,
+      values(Web_Service_Errors.event_id) AS sample_event_ids
       FROM datamodel=Splunk_Audit.Web_Service_Errors
-      BY Web_Service_Errors.host, Web_Service_Errors.source, Web_Service_Errors.sourcetype, Web_Service_Errors.event_id
+      BY Web_Service_Errors.host, Web_Service_Errors.source, Web_Service_Errors.sourcetype
   | rename Web_Service_Errors.* AS *
+  | eval sample_event_ids=mvindex(sample_event_ids, 0, 9)
   | where error_count>=5
   | sort 0 -last_seen_epoch
   | head 200
-  | table first_seen_epoch, last_seen_epoch, error_count, host, source, sourcetype, event_id
+  | table first_seen_epoch, last_seen_epoch, error_count, host, source, sourcetype, sample_event_ids
 dispatch:
   earliest_time: "-24h"
   latest_time: "now"
