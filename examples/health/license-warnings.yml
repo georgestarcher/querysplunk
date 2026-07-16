@@ -35,6 +35,17 @@ interpretation:
   - Check current license usage and pool status, then resolve sustained quota or entitlement
     problems.
 
+result_handling:
+  classification: internal
+  contains_credentials: false
+  agent_display: bounded_summary
+  recommended_file_mode: "0600"
+  retention: temporary
+result_contract:
+  required_fields: []
+  allow_empty: true
+  maximum_rows: 200
+
 app: search
 output_file: license-warnings.json
 mode: job
@@ -42,6 +53,7 @@ search: |
   search index=_internal earliest=-24h (component=LicenseUsage OR component=LicenseManager)
   | stats count, min(_time) AS first_seen_epoch, max(_time) AS last_seen_epoch, latest(_raw) AS latest_message BY host, component, log_level
   | sort - count
+  | head 200
 dispatch:
   earliest_time: "-24h"
   latest_time: "now"

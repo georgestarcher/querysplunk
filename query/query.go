@@ -49,6 +49,18 @@ results:
   count: 0
   offset: 0
 
+result_handling:
+  classification: normal
+  contains_credentials: false
+  agent_display: normal
+  recommended_file_mode: "0600"
+  retention: normal
+
+result_contract:
+  required_fields: []
+  allow_empty: true
+  maximum_rows: 0
+
 safety:
   allow_old_earliest: false
   allow_index_wildcard: false
@@ -78,6 +90,8 @@ type Config struct {
 	Requirements   *Requirements   `json:"requirements,omitempty" yaml:"requirements,omitempty"`
 	Provenance     *Provenance     `json:"provenance,omitempty" yaml:"provenance,omitempty"`
 	Interpretation *Interpretation `json:"interpretation,omitempty" yaml:"interpretation,omitempty"`
+	ResultHandling *ResultHandling `json:"result_handling,omitempty" yaml:"result_handling,omitempty"`
+	ResultContract *ResultContract `json:"result_contract,omitempty" yaml:"result_contract,omitempty"`
 	App            string          `json:"app" yaml:"app"`
 	OutputFile     string          `json:"output_file" yaml:"output_file"`
 	Mode           string          `json:"mode" yaml:"mode"`
@@ -315,6 +329,12 @@ func (config Config) Validate() error {
 	if err := validateInterpretation(config.Interpretation); err != nil {
 		return err
 	}
+	if err := validateResultHandling(config.ResultHandling); err != nil {
+		return err
+	}
+	if err := validateResultContract(config.ResultContract, config.Results.OutputMode); err != nil {
+		return err
+	}
 	if strings.TrimSpace(config.Search) == "" {
 		return fmt.Errorf("%w: search content is required", ErrInvalidConfig)
 	}
@@ -382,7 +402,10 @@ func Analyze(config Config, policy SafetyPolicy) []Finding {
 		now = policy.Now()
 	}
 	options, _ := config.SearchOptions()
-	findings := make([]Finding, 0, 3)
+	findings := make([]Finding, 0, 4)
+	if config.ResultHandling != nil && config.ResultHandling.ContainsCredentials {
+		findings = append(findings, Finding{Kind: FindingResultContainsCredentials, Severity: SeverityWarning, Message: "result handling declares credential-bearing output; keep the owner-only result file temporary and do not display raw values"})
+	}
 	if !HasTimeBounds(config.Search, options.DispatchParams) {
 		findings = append(findings, Finding{Kind: FindingMissingTimeBound, Severity: SeverityWarning, Message: "no SPL or dispatch earliest/latest time bound was provided; Splunk REST searches can run over all time"})
 	}
@@ -490,14 +513,21 @@ func (prepared Prepared) Search(ctx context.Context, client *splunk.Client) (spl
 	if client == nil {
 		return splunk.Result{}, fmt.Errorf("%w: Splunk client is required", ErrInvalidConfig)
 	}
-	return client.Search(ctx, prepared.config.Search, cloneOptions(prepared.options))
+	result, err := client.Search(ctx, prepared.config.Search, cloneOptions(prepared.options))
+	if err != nil {
+		return result, err
+	}
+	if err := prepared.validateResultBytes(result.Data); err != nil {
+		return result, err
+	}
+	return result, nil
 }
 
 func (prepared Prepared) SearchTo(ctx context.Context, client *splunk.Client, output io.Writer) (splunk.Result, error) {
 	if client == nil {
 		return splunk.Result{}, fmt.Errorf("%w: Splunk client is required", ErrInvalidConfig)
 	}
-	return client.SearchTo(ctx, prepared.config.Search, cloneOptions(prepared.options), output)
+	return prepared.searchToWithResultContract(ctx, client, output)
 }
 
 // SearchToFile uses a same-directory temporary file and only replaces the
@@ -599,6 +629,9 @@ func defaults(config Config) Config {
 	if strings.TrimSpace(config.Diagnostics.SearchLog) == "" {
 		config.Diagnostics.SearchLog = string(splunk.SearchLogModeSummary)
 	}
+	if config.ResultContract != nil && strings.TrimSpace(config.Results.OutputMode) == "" {
+		config.Results.OutputMode = "json"
+	}
 	return config
 }
 
@@ -653,6 +686,15 @@ func cloneConfig(config Config) Config {
 		interpretation.FalsePositives = append([]string(nil), config.Interpretation.FalsePositives...)
 		interpretation.RecommendedActions = append([]string(nil), config.Interpretation.RecommendedActions...)
 		config.Interpretation = &interpretation
+	}
+	if config.ResultHandling != nil {
+		resultHandling := *config.ResultHandling
+		config.ResultHandling = &resultHandling
+	}
+	if config.ResultContract != nil {
+		resultContract := *config.ResultContract
+		resultContract.RequiredFields = append([]string(nil), config.ResultContract.RequiredFields...)
+		config.ResultContract = &resultContract
 	}
 	config.Dispatch.RequiredFields = append([]string(nil), config.Dispatch.RequiredFields...)
 	return config

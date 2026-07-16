@@ -256,7 +256,9 @@ searches unless acknowledged with -allow-old-earliest, -allow-index-wildcard,
 or YAML safety.allow_old_earliest / safety.allow_index_wildcard.
 
 Generated YAML uses schema version 1. Descriptive OOB metadata is optional for
-user-created search files and never contains credentials.
+user-created search files and never contains credentials. Result handling can
+classify sensitive output, and result contracts can validate supported JSON
+response shapes.
 
 Options:`)
 	flag.PrintDefaults()
@@ -425,14 +427,22 @@ func main() {
 	prepared, err := querypkg.Prepare(config, overrides, querypkg.SafetyPolicy{})
 	for _, finding := range prepared.Findings() {
 		if finding.Severity == querypkg.SeverityWarning || finding.Severity == querypkg.SeverityAcknowledged {
-			log.Printf("WARN: %s", finding.Message)
+			if jsonEventOutput != nil {
+				jsonEventOutput.emitFinding(finding.Kind)
+			} else {
+				log.Printf("WARN: %s", finding.Message)
+			}
 		}
 	}
 	if err != nil {
 		var violation *querypkg.ViolationError
 		if errors.As(err, &violation) {
 			for _, finding := range violation.Findings {
-				log.Printf("WARN: %s", finding.Message)
+				if jsonEventOutput != nil {
+					jsonEventOutput.emitFinding(finding.Kind)
+				} else {
+					log.Printf("WARN: %s", finding.Message)
+				}
 			}
 			reportCLIError(os.Stderr, jsonEventOutput, "search", errors.New("search blocked by safety controls"))
 			os.Exit(1)

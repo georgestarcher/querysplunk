@@ -405,7 +405,7 @@ Plain SPL files remain supported. Use `-config` when a search needs reusable
 settings beyond the SPL text, such as app context, output file, execution mode,
 dispatch parameters, result parameters, or search log diagnostics.
 
-querysplunk uses schema version `1` for generated and bundled YAML. Existing compact files without `schema_version` remain compatible and are interpreted as version 1. Reusable searches can include optional `metadata`, `requirements`, `provenance`, and `interpretation` blocks describing identity and lifecycle, prerequisites, origin and licensing, and how to interpret results. Bundled out-of-box searches include all four blocks; credentials never belong in them.
+querysplunk uses schema version `1` for generated and bundled YAML. Existing compact files without `schema_version` remain compatible and are interpreted as version 1. Reusable searches can include optional `metadata`, `requirements`, `provenance`, and `interpretation` blocks describing identity and lifecycle, prerequisites, origin and licensing, and how to interpret results. Optional `result_handling` and `result_contract` blocks classify output, constrain AI-assistant display, protect credential-bearing results, and validate supported JSON response shapes. Bundled out-of-box searches include these blocks; credentials never belong in YAML.
 
 ```bash
 querysplunk -config search.yml
@@ -558,11 +558,25 @@ interpretation:
     - Intentionally quiet indexes can have low volume.
   recommended_actions:
     - Compare unexpected changes with ingestion and retention configuration.
+result_handling:
+  classification: internal
+  contains_credentials: false
+  agent_display: bounded_summary
+  recommended_file_mode: "0600"
+  retention: temporary
+result_contract:
+  required_fields: [index, count]
+  allow_empty: true
+  maximum_rows: 200
 app: search
 search: |-
   | eventcount summarize=false
   | table index, count
 ```
+
+When a result contract is present, querysplunk validates JSON after retrieval. Buffered calls return a typed contract error with the result, streaming calls validate through an owner-only temporary spool, and `SearchToFile` leaves any previous output untouched unless both retrieval and contract validation succeed. Errors identify only structural details such as a missing field or row limit; they never include result values.
+
+Credential-bearing output must use `classification: secret`, `agent_display: do_not_display`, `recommended_file_mode: "0600"`, and temporary retention. The CLI and Go package emit a credential-output warning without printing raw values. Result metadata cannot grant Splunk access, sanitize unsafe SPL, or replace operator authorization.
 
 CLI flags override config values where both are set:
 

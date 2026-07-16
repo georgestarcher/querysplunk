@@ -35,12 +35,29 @@ interpretation:
   - Review severity and creation time, remediate active conditions, and clear messages
     only through an authorized workflow.
 
+result_handling:
+  classification: internal
+  contains_credentials: false
+  agent_display: bounded_summary
+  recommended_file_mode: "0600"
+  retention: temporary
+result_contract:
+  required_fields:
+  - title
+  - message
+  - severity
+  - server
+  - timeCreated_iso
+  allow_empty: true
+  maximum_rows: 200
+
 app: search
 output_file: system-messages.json
 mode: job
 search: |
   | rest /services/messages count=100 strict=true splunk_server=local
   | table title, message, severity, server, timeCreated_iso
+  | head 200
 results:
   endpoint: auto
   output_mode: json

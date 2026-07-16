@@ -37,12 +37,29 @@ interpretation:
   - Resolve the complete stanza title and app context before expanding a macro into
     another search.
 
+result_handling:
+  classification: internal
+  contains_credentials: false
+  agent_display: bounded_summary
+  recommended_file_mode: "0600"
+  retention: temporary
+result_contract:
+  required_fields:
+  - title
+  - definition
+  - args
+  - eai:appName
+  - eai:userName
+  allow_empty: true
+  maximum_rows: 200
+
 app: search
 output_file: macro-definitions.json
 mode: job
 search: |
   | rest /servicesNS/-/search/configs/conf-macros count=2 strict=true splunk_server=local search="title=example_macro"
   | table title, definition, args, eai:appName, eai:userName
+  | head 200
 results:
   endpoint: auto
   output_mode: json

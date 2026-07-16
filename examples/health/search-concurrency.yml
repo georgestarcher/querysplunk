@@ -33,12 +33,29 @@ interpretation:
   - Review concurrent workloads, scheduler pressure, search quotas, and workload-management
     settings.
 
+result_handling:
+  classification: internal
+  contains_credentials: false
+  agent_display: bounded_summary
+  recommended_file_mode: "0600"
+  retention: temporary
+result_contract:
+  required_fields:
+  - title
+  - active_hist_searches
+  - active_realtime_searches
+  - total_hist_searches
+  - total_realtime_searches
+  allow_empty: true
+  maximum_rows: 200
+
 app: search
 output_file: search-concurrency.json
 mode: job
 search: |
   | rest /services/server/status/limits/search-concurrency
   | table title, active_hist_searches, active_realtime_searches, total_hist_searches, total_realtime_searches
+  | head 200
 results:
   endpoint: auto
   output_mode: json

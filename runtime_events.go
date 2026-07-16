@@ -27,13 +27,31 @@ func (sink *jsonEventSink) HandleEvent(_ context.Context, event splunk.RuntimeEv
 	}
 	sink.mu.Lock()
 	defer sink.mu.Unlock()
-	if event.Sequence > sink.lastSequence {
+	if event.Sequence <= sink.lastSequence {
+		sink.lastSequence++
+		event.Sequence = sink.lastSequence
+	} else {
 		sink.lastSequence = event.Sequence
+	}
+	if event.Time.IsZero() {
+		event.Time = time.Now().UTC()
 	}
 	if event.Kind == splunk.EventOperation && event.Outcome == "failure" {
 		sink.failedOperations[event.Operation] = true
 	}
 	_ = sink.encoder.Encode(event)
+}
+
+func (sink *jsonEventSink) emitFinding(code string) {
+	if sink == nil || sink.encoder == nil {
+		return
+	}
+	sink.HandleEvent(context.Background(), splunk.RuntimeEvent{
+		Kind:        splunk.EventFinding,
+		Severity:    splunk.EventSeverityWarning,
+		Operation:   "search",
+		FindingCode: code,
+	})
 }
 
 func (sink *jsonEventSink) ensureFailure(operation string) {

@@ -20,6 +20,7 @@ const (
 	EventCancellation     RuntimeEventKind = "cancellation"
 	EventOutputSaved      RuntimeEventKind = "output_saved"
 	EventOperation        RuntimeEventKind = "operation"
+	EventFinding          RuntimeEventKind = "finding"
 )
 
 const (
@@ -51,6 +52,7 @@ type RuntimeEvent struct {
 	OutputFile        string               `json:"output_file,omitempty"`
 	CancelRequested   bool                 `json:"cancel_requested,omitempty"`
 	Outcome           string               `json:"outcome,omitempty"`
+	FindingCode       string               `json:"finding_code,omitempty"`
 }
 
 // EventSink receives events synchronously in sequence order. Client serializes

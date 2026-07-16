@@ -32,6 +32,8 @@ Important fields:
 - `requirements`: optional supported platforms and required apps, data models, indexes, fields, or capabilities.
 - `provenance`: optional source project, URL, rule IDs, revision, license, and adaptation notes.
 - `interpretation`: optional result summary, false positives, and recommended actions.
+- `result_handling`: optional classification, credential-content declaration, agent display policy, owner-only file-mode recommendation, and retention guidance.
+- `result_contract`: optional required fields, empty-result policy, and maximum row count for supported JSON result shapes.
 - `app`: Splunk app namespace.
 - `output_file`: where querysplunk writes the raw Splunk response body.
 - `mode`: `job` or `export`.
@@ -41,7 +43,11 @@ Important fields:
 - `results`: result endpoint, output mode, count, and offset.
 - `diagnostics.search_log`: `off`, `summary`, `save`, or `both`.
 
-When a descriptive block is present, querysplunk validates its required fields. Bundled out-of-box searches include all four descriptive blocks; compact user-created files may omit them. Metadata IDs must be lowercase namespaced values such as `querysplunk.health.scheduler-health`. Lifecycle status is one of `draft`, `experimental`, `stable`, `deprecated`, or `retired`; severity is one of `informational`, `low`, `medium`, `high`, or `critical`.
+When a descriptive block is present, querysplunk validates its required fields. Bundled out-of-box searches include the descriptive and result-policy blocks; compact user-created files may omit them. Metadata IDs must be lowercase namespaced values such as `querysplunk.health.scheduler-health`. Lifecycle status is one of `draft`, `experimental`, `stable`, `deprecated`, or `retired`; severity is one of `informational`, `low`, `medium`, `high`, or `critical`.
+
+Result classifications are `normal`, `internal`, `sensitive`, and `secret`. Agent display policies are `normal`, `bounded_summary`, `summary_only`, and `do_not_display`. Credential-bearing results must be classified `secret`, use `do_not_display`, recommend file mode `"0600"`, and use temporary retention. These declarations do not expand Splunk authorization and do not make unsafe SPL safe.
+
+Contracts are enforced only for `results.output_mode: json`. querysplunk recognizes normal job envelopes containing `results`, streaming export frames containing `result`, and top-level result arrays. Required fields must exist in every row. `allow_empty` distinguishes a valid zero-row response from a contract failure, and `maximum_rows` checks the response without rewriting SPL. Contract errors contain only row numbers and field names, never result values.
 
 Secrets never belong in YAML. Use environment variables or a local `.env` mechanism for credentials.
 

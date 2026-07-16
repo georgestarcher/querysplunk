@@ -21,6 +21,7 @@ import (
 func TestJSONEventSinkWritesOneObjectPerLine(t *testing.T) {
 	var output bytes.Buffer
 	sink := newJSONEventSink(&output)
+	sink.emitFinding("result_contains_credentials")
 	sink.HandleEvent(context.Background(), splunk.RuntimeEvent{Sequence: 1, Kind: splunk.EventJobStatus, Severity: "info", JobID: "safe-job", State: "RUNNING"})
 	sink.HandleEvent(context.Background(), splunk.RuntimeEvent{Sequence: 2, Kind: splunk.EventOperation, Severity: "info", Operation: "wait", Outcome: "success"})
 	scanner := bufio.NewScanner(&output)
@@ -34,8 +35,14 @@ func TestJSONEventSinkWritesOneObjectPerLine(t *testing.T) {
 		if event.Sequence != uint64(count) {
 			t.Fatalf("line %d sequence = %d", count, event.Sequence)
 		}
+		if event.Time.IsZero() {
+			t.Fatalf("line %d has no timestamp", count)
+		}
+		if count == 1 && (event.Kind != splunk.EventFinding || event.FindingCode != "result_contains_credentials" || event.Severity != splunk.EventSeverityWarning) {
+			t.Fatalf("unexpected finding event: %+v", event)
+		}
 	}
-	if err := scanner.Err(); err != nil || count != 2 {
+	if err := scanner.Err(); err != nil || count != 3 {
 		t.Fatalf("lines=%d error=%v output=%q", count, err, output.String())
 	}
 }

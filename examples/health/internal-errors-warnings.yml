@@ -35,6 +35,17 @@ interpretation:
   - Prioritize recurring components and messages, correlate with deployment changes,
     and inspect detailed logs when needed.
 
+result_handling:
+  classification: internal
+  contains_credentials: false
+  agent_display: bounded_summary
+  recommended_file_mode: "0600"
+  retention: temporary
+result_contract:
+  required_fields: []
+  allow_empty: true
+  maximum_rows: 200
+
 app: search
 output_file: internal-errors-warnings.json
 mode: job
@@ -42,6 +53,7 @@ search: |
   search index=_internal earliest=-1h (log_level=error OR log_level=warn*)
   | stats count, min(_time) AS first_seen_epoch, max(_time) AS last_seen_epoch, latest(_raw) AS latest_message BY host, source, sourcetype, log_level, component
   | sort - count
+  | head 200
 dispatch:
   earliest_time: "-1h"
   latest_time: "now"
