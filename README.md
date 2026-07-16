@@ -657,6 +657,13 @@ actually available for Splunk AI Assistant activity. It provides a tested
 privacy-preserving SPL baseline and documents the limits that future AI-agent
 detections must preserve.
 
+The experimental [AI-agent detection starter pack](examples/detections/ai-agent/README.md)
+adds bounded hunts for sensitive-data enrichment, `ai` followed by a separate
+action-capable command, and explicit AI-result flow into `map` or `script`.
+The `ai` command transforms search rows and does not take those actions by
+itself. These searches provide threat-hunting guidance, not complete security
+coverage, automatic blocking, or proof of malicious activity.
+
 Lower-level knowledge-object inspection examples remain in `examples/rest/`,
 including saved-search definitions, macros, and lookup metadata or previews.
 
@@ -922,7 +929,7 @@ release:
 
 Each platform archive is a self-contained CLI bundle. It includes the
 `splunkquery` binary, the platform installer, `INSTALL.md`, this README,
-`examples/health/`, and
+`THIRD_PARTY_NOTICES.md`, the bundled examples, and
 `.agents/skills/querysplunk/` for local AI-assistant workflows. The `.agents`
 content is a portable Agent Skill for Codex and Claude Code; it is not loaded by
 the `querysplunk` binary until installed into an assistant's skill directory.

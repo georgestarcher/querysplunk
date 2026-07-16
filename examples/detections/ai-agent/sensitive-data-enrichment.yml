@@ -1,0 +1,110 @@
+schema_version: "1"
+metadata:
+  title: AI enrichment over credential-bearing data
+  description: Identify audited Splunk ai command searches that reference credential-bearing
+    REST data, lookups, or fields.
+  category: detection
+  status: experimental
+  version: 1
+  author: querysplunk contributors
+  severity: high
+  tags:
+  - ai-agent
+  - audit
+  - sensitive-data
+  - atr-inspired
+  id: querysplunk.detection.ai-agent.sensitive-data-enrichment
+requirements:
+  platforms:
+  - splunk-cloud
+  - splunk-enterprise
+  indexes:
+  - _audit
+  fields:
+  - user
+  - app
+  - action
+  - search_type
+  - info
+  - search_id
+  - search
+  capabilities:
+  - search
+provenance:
+  source: Agent Threat Rules
+  source_url: https://github.com/Agent-Threat-Rule/agent-threat-rules
+  source_rule_ids:
+  - ATR-2026-00702
+  source_revision: 0c7a1f133fc176a732767363db65102aa0aae710
+  license: MIT
+  adaptation_notes: Original ATR-2026-00702 detects credential-exfiltration instructions;
+    this manually reviewed querysplunk adaptation only identifies ai enrichment over
+    credential-bearing inputs and does not claim exfiltration or action. SPL and field
+    mapping are original to querysplunk.
+interpretation:
+  summary: Rows identify audited ai command searches that appear to reference a stored-credential
+    endpoint, a credential-named lookup, or clear/encrypted password fields.
+  false_positives:
+  - An authorized administrator might use AI to classify credential metadata without exposing
+    credential values.
+  - Lookup names can contain credential-related words even when the lookup contains no secrets.
+  recommended_actions:
+  - Privately inspect the original search, confirm which fields reached the ai command, and
+    verify the user's authorization and data-handling purpose.
+  - Do not describe the event as exfiltration unless separate evidence shows a downstream
+    disclosure or action.
+
+result_handling:
+  classification: sensitive
+  contains_credentials: false
+  agent_display: summary_only
+  recommended_file_mode: "0600"
+  retention: temporary
+result_contract:
+  required_fields:
+  - first_seen_epoch
+  - last_seen_epoch
+  - audit_event_count
+  - source_rule_id
+  - session_id
+  - user
+  - app
+  - search_type
+  - tool_status
+  - tool_input_sha256
+  - tool_input_length
+  - sensitive_surface
+  allow_empty: true
+  maximum_rows: 100
+
+app: search
+output_file: detection-ai-sensitive-data-enrichment.json
+mode: job
+search: |
+  search index=_audit action=search
+  | eval ai_command_pattern="(?i)\\|\\s*"."a"."i"."(?:\\s|$)",
+      sensitive_input_pattern="(?i)(?:\\|\\s*rest\\s+/services(?:NS/[^/\\s]+/[^/\\s]+)?/storage/passwords\\b|\\|\\s*inputlookup\\b[^\\n|]{0,300}(?:credential|secret|token|password|key)[^\\n|]*|\\b(?:clear_password|encr_password)\\b)"
+  | where match(search, ai_command_pattern) AND match(search, sensitive_input_pattern)
+  | eval session_id=trim(search_id, "'"),
+      source_rule_id="ATR-2026-00702",
+      sensitive_surface="credential_bearing_source_or_field",
+      tool_input_sha256=sha256(search),
+      tool_input_length=len(search)
+  | stats count AS audit_event_count,
+      min(_time) AS first_seen_epoch,
+      max(_time) AS last_seen_epoch,
+      values(info) AS tool_status
+      BY source_rule_id, session_id, user, app, search_type, tool_input_sha256, tool_input_length, sensitive_surface
+  | sort 0 -last_seen_epoch
+  | head 100
+  | table first_seen_epoch, last_seen_epoch, audit_event_count, source_rule_id, session_id, user, app, search_type, tool_status, tool_input_sha256, tool_input_length, sensitive_surface
+dispatch:
+  earliest_time: "-24h"
+  latest_time: "now"
+results:
+  endpoint: auto
+  output_mode: json
+  count: 0
+  offset: 0
+diagnostics:
+  search_log: summary

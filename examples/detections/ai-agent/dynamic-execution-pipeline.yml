@@ -1,0 +1,110 @@
+schema_version: "1"
+metadata:
+  title: AI-derived output referenced by dynamic execution
+  description: Identify audited Splunk pipelines where map or script references an ai_result
+    field produced earlier in the pipeline.
+  category: detection
+  status: experimental
+  version: 1
+  author: querysplunk contributors
+  severity: critical
+  tags:
+  - ai-agent
+  - audit
+  - dynamic-execution
+  - atr-inspired
+  id: querysplunk.detection.ai-agent.dynamic-execution-pipeline
+requirements:
+  platforms:
+  - splunk-cloud
+  - splunk-enterprise
+  indexes:
+  - _audit
+  fields:
+  - user
+  - app
+  - action
+  - search_type
+  - info
+  - search_id
+  - search
+  capabilities:
+  - search
+provenance:
+  source: Agent Threat Rules
+  source_url: https://github.com/Agent-Threat-Rule/agent-threat-rules
+  source_rule_ids:
+  - ATR-2026-00711
+  - ATR-2026-00714
+  source_revision: 0c7a1f133fc176a732767363db65102aa0aae710
+  license: MIT
+  adaptation_notes: ATR-2026-00711 and ATR-2026-00714 inspired the destructive-command and
+    forced-tool risk concepts. This manually reviewed querysplunk SPL requires explicit
+    evidence that map or script references an ai_result field; it does not claim that ai
+    autonomously selected or executed a tool. SPL and field mapping are original to querysplunk.
+interpretation:
+  summary: Rows identify audited searches where AI-derived enrichment appears to be substituted
+    into map or passed to script later in the same SPL pipeline.
+  false_positives:
+  - A carefully reviewed automation can intentionally use AI classification to select a bounded
+    follow-up search or script input.
+  - Textual references to ai_result fields inside documentation or quoted examples can match.
+  recommended_actions:
+  - Privately inspect the map or script command, substitutions, allowed destinations, limits,
+    execution permissions, and resulting jobs or artifacts.
+  - Treat this as a high-risk data-flow lead, not proof that the AI command executed an action.
+
+result_handling:
+  classification: sensitive
+  contains_credentials: false
+  agent_display: summary_only
+  recommended_file_mode: "0600"
+  retention: temporary
+result_contract:
+  required_fields:
+  - first_seen_epoch
+  - last_seen_epoch
+  - audit_event_count
+  - source_rule_ids
+  - session_id
+  - user
+  - app
+  - search_type
+  - tool_status
+  - dynamic_action
+  - tool_input_sha256
+  - tool_input_length
+  allow_empty: true
+  maximum_rows: 100
+
+app: search
+output_file: detection-ai-dynamic-execution-pipeline.json
+mode: job
+search: |
+  search index=_audit action=search
+  | eval dynamic_execution_pattern="(?is)\\|\\s*ai(?:\\s|$).*?\\|\\s*(?:map|script)\\b[^|]*(?:\\$?ai_result_[0-9]+\\$?)"
+  | where match(search, dynamic_execution_pattern)
+  | rex field=search "(?is)\\|\\s*ai(?:\\s|$).*?\\|\\s*(?<dynamic_action>map|script)\\b[^|]*(?:\\$?ai_result_[0-9]+\\$?)"
+  | eval session_id=trim(search_id, "'"),
+      source_rule_ids="ATR-2026-00711,ATR-2026-00714",
+      dynamic_action=lower(dynamic_action),
+      tool_input_sha256=sha256(search),
+      tool_input_length=len(search)
+  | stats count AS audit_event_count,
+      min(_time) AS first_seen_epoch,
+      max(_time) AS last_seen_epoch,
+      values(info) AS tool_status
+      BY source_rule_ids, session_id, user, app, search_type, dynamic_action, tool_input_sha256, tool_input_length
+  | sort 0 -last_seen_epoch
+  | head 100
+  | table first_seen_epoch, last_seen_epoch, audit_event_count, source_rule_ids, session_id, user, app, search_type, tool_status, dynamic_action, tool_input_sha256, tool_input_length
+dispatch:
+  earliest_time: "-24h"
+  latest_time: "now"
+results:
+  endpoint: auto
+  output_mode: json
+  count: 0
+  offset: 0
+diagnostics:
+  search_log: summary

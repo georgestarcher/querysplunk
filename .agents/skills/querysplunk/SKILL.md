@@ -30,6 +30,11 @@ assistant skill files after installation or upgrade.
 
 Generated and bundled files use `schema_version: "1"`. Existing runtime-only YAML without a version remains valid and is interpreted as version 1. Bundled out-of-box searches also include `metadata`, `requirements`, `provenance`, and `interpretation`; use these blocks to select searches, explain prerequisites and sensitivity, and interpret results. Preserve provenance whenever a search is copied or adapted.
 
+For AI-agent threat hunts, read
+[`references/ai-agent-detections.md`](references/ai-agent-detections.md) before
+selecting or explaining a search. Preserve the boundary between the `ai`
+transformation and any separate downstream action command.
+
 It does not store credentials in YAML. Splunk connection settings must come from environment variables, `.env`, 1Password-backed local environment files, or GitHub Actions environment secrets.
 
 Go and AI-agent applications can use

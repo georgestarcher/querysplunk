@@ -18,6 +18,13 @@ bounded searches plus two synthetic probes:
 No application, logging, model, or Splunk configuration was changed. Recheck
 the field inventory after an AI Assistant or Splunk platform upgrade.
 
+The Splunk `ai` command is a transforming search command. It enriches or
+extracts features from rows in the current pipeline and returns fields such as
+`ai_result_1`; it does not independently email, write, run scripts, dispatch
+searches, or invoke external tools. Any action claim requires evidence of a
+separate action-capable command, and command co-occurrence alone does not prove
+that the action consumed AI output.
+
 ## Observed telemetry surfaces
 
 | Surface | Availability | Useful fields | Limits |

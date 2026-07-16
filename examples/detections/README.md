@@ -11,9 +11,17 @@ observed `_audit`, `_internal`, extension-worker, and `search.log` fields for
 Splunk AI Assistant activity. It includes a tested, bounded normalization SPL,
 an Agent Threat Rules-oriented field map, sensitivity and retention guidance,
 Splunk Cloud limitations, and the evidence boundary for future AI-agent
-detections. No AI-specific detection YAML is included yet; the mapping defines
-what the planned starter pack can support without inventing unavailable model,
-output, token, latency, or cross-source session data.
+detections. The mapping defines what the starter pack can support without
+inventing unavailable model, output, token, latency, or cross-source session
+data.
+
+## AI-agent starter pack
+
+The experimental searches under `ai-agent/` identify sensitive-data
+enrichment, `ai` followed by a downstream action command, and explicit
+`ai_result_N` references near `map` or `script`. The `ai` command transforms
+search rows; it does not take those actions independently. Read the
+[starter-pack guide](ai-agent/README.md) before execution.
 
 ## Splunk Audit Logs detections
 
@@ -53,3 +61,8 @@ querysplunk -config examples/detections/sensitive-search-activity.yml
 
 Both examples default to the last 24 hours and cap displayed detections at 200
 rows. Adjust those bounds deliberately for the investigation.
+
+The AI-agent starter pack also includes
+`ai-agent/ai-assisted-delete-pipeline.yml`. It detects an `ai` command
+followed later by `delete`, while preserving the distinction between AI
+enrichment and the separate event-hiding action.
