@@ -21,12 +21,17 @@ dist_abs="$(cd "${dist_dir}" && pwd)"
 copy_bundle_files() {
   local package_dir="$1"
   local goos="$2"
-  cp README.md INSTALL.md "${package_dir}/"
+  cp README.md INSTALL.md THIRD_PARTY_NOTICES.md "${package_dir}/"
   mkdir -p "${package_dir}/examples" "${package_dir}/.agents/skills"
   mkdir -p "${package_dir}/examples/health" "${package_dir}/examples/rest" "${package_dir}/examples/detections" "${package_dir}/examples/pentest"
   find examples/health -maxdepth 1 -type f \( -name '*.md' -o -name '*.yml' \) -exec cp {} "${package_dir}/examples/health/" \;
   find examples/rest -maxdepth 1 -type f \( -name '*.md' -o -name '*.yml' \) -exec cp {} "${package_dir}/examples/rest/" \;
-  find examples/detections -maxdepth 1 -type f \( -name '*.md' -o -name '*.yml' \) -exec cp {} "${package_dir}/examples/detections/" \;
+  while IFS= read -r source_file; do
+    relative_file="${source_file#examples/detections/}"
+    destination="${package_dir}/examples/detections/${relative_file}"
+    mkdir -p "$(dirname "${destination}")"
+    cp "${source_file}" "${destination}"
+  done < <(find examples/detections -type f \( -name '*.md' -o -name '*.yml' \) -print)
   find examples/pentest -maxdepth 1 -type f \( -name '*.md' -o -name '*.yml' \) -exec cp {} "${package_dir}/examples/pentest/" \;
   cp -R .agents/skills/querysplunk "${package_dir}/.agents/skills/querysplunk"
   if [ "${goos}" = "windows" ]; then

@@ -1,0 +1,109 @@
+schema_version: "1"
+metadata:
+  title: AI enrichment followed by an action command
+  description: Identify audited Splunk pipelines where the ai command is followed by an
+    external, alert, write, or script command.
+  category: detection
+  status: experimental
+  version: 1
+  author: querysplunk contributors
+  severity: critical
+  tags:
+  - ai-agent
+  - audit
+  - action-pipeline
+  - atr-inspired
+  id: querysplunk.detection.ai-agent.downstream-action-pipeline
+requirements:
+  platforms:
+  - splunk-cloud
+  - splunk-enterprise
+  indexes:
+  - _audit
+  fields:
+  - user
+  - app
+  - action
+  - search_type
+  - info
+  - search_id
+  - search
+  capabilities:
+  - search
+provenance:
+  source: Agent Threat Rules
+  source_url: https://github.com/Agent-Threat-Rule/agent-threat-rules
+  source_rule_ids:
+  - ATR-2026-00702
+  source_revision: 0c7a1f133fc176a732767363db65102aa0aae710
+  license: MIT
+  adaptation_notes: ATR-2026-00702 inspired the action-pairing threat concept. This manually
+    reviewed querysplunk SPL detects an ai transformation followed by a Splunk action-capable
+    command; it does not claim that ai initiated the action or that data was exfiltrated.
+    SPL and field mapping are original to querysplunk.
+interpretation:
+  summary: Rows identify audited searches where ai enrichment precedes sendemail, sendalert,
+    collect, outputlookup, or script in the same bounded SPL pipeline.
+  false_positives:
+  - Authorized reports can enrich rows and then email, alert, collect, or save expected output.
+  - The downstream command can operate independently of the AI-generated field.
+  recommended_actions:
+  - Privately inspect command order, downstream arguments, referenced fields, destination,
+    user authorization, and resulting artifacts.
+  - Confirm whether any ai_result field actually influenced the action before escalating.
+
+result_handling:
+  classification: sensitive
+  contains_credentials: false
+  agent_display: summary_only
+  recommended_file_mode: "0600"
+  retention: temporary
+result_contract:
+  required_fields:
+  - first_seen_epoch
+  - last_seen_epoch
+  - audit_event_count
+  - source_rule_id
+  - session_id
+  - user
+  - app
+  - search_type
+  - tool_status
+  - downstream_action
+  - tool_input_sha256
+  - tool_input_length
+  allow_empty: true
+  maximum_rows: 100
+
+app: search
+output_file: detection-ai-downstream-action-pipeline.json
+mode: job
+search: |
+  search index=_audit action=search
+  | eval structural_search=replace(search, "(?s)\"(?:\\\\.|[^\"\\\\])*\"", "\"\"")
+  | eval action_pipeline_pattern="(?is)\\|\\s*ai(?:\\s|$).*?\\|\\s*(?:sendemail|sendalert|collect|outputlookup|script)\\b"
+  | where match(structural_search, action_pipeline_pattern)
+  | rex field=structural_search "(?is)\\|\\s*ai(?:\\s|$).*?\\|\\s*(?<downstream_action>sendemail|sendalert|collect|outputlookup|script)\\b"
+  | eval session_id=trim(search_id, "'"),
+      source_rule_id="ATR-2026-00702",
+      downstream_action=lower(downstream_action),
+      tool_input_sha256=sha256(search),
+      tool_input_length=len(search)
+  | stats count AS audit_event_count,
+      min(_time) AS first_seen_epoch,
+      max(_time) AS last_seen_epoch,
+      values(info) AS tool_status
+      BY source_rule_id, session_id, user, app, search_type, downstream_action, tool_input_sha256, tool_input_length
+  | sort 0 -last_seen_epoch
+  | head 100
+  | table first_seen_epoch, last_seen_epoch, audit_event_count, source_rule_id, session_id, user, app, search_type, tool_status, downstream_action, tool_input_sha256, tool_input_length
+dispatch:
+  earliest_time: "-24h"
+  latest_time: "now"
+results:
+  endpoint: auto
+  output_mode: json
+  count: 0
+  offset: 0
+diagnostics:
+  search_log: summary

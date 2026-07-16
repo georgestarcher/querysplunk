@@ -45,6 +45,14 @@ The default installation is user-local. It installs the command as
 for locally detected Codex and Claude Code installations. It never reads or
 configures Splunk credentials.
 
+Recommended setup order:
+
+1. Verify the archive checksum.
+2. Run the bundled installer.
+3. Verify the installed command with `querysplunk -version`.
+4. Generate or validate YAML offline with `querysplunk -validate-config`.
+5. Export Splunk credentials only when you are ready to run a live search.
+
 The installer changes only:
 
 - the selected binary destination's `querysplunk` executable;
@@ -142,6 +150,13 @@ Validation is offline and does not require credentials. After reviewing the
 effective plan and safety findings, configure Splunk connection settings in
 the environment and run the approved search. Use `-json-events` for agent-safe
 runtime progress and `-job-sid` to resume an existing job.
+
+For AI-assisted use, keep the README as the short user-facing entry point and
+this file as the detailed install reference. Ask the assistant to validate YAML
+before execution and to summarize outputs without printing credentials, private
+URLs, raw result files, or complete search logs. The bundled querysplunk skill
+contains the exact preflight, execution, resume, and cancellation rules agents
+should follow.
 
 For a live search, the assistant should follow this order:
 

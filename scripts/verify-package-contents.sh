@@ -7,6 +7,7 @@ expected_version="${2:-}"
 required_common=(
   "README.md"
   "INSTALL.md"
+  "THIRD_PARTY_NOTICES.md"
   "examples/health/README.md"
   "examples/health/splunkd-health.yml"
   "examples/health/system-messages.yml"
@@ -22,10 +23,17 @@ required_common=(
   "examples/pentest/possible-password-paste-by-app.yml"
   "examples/pentest/possible-password-paste-by-dest.yml"
   "examples/detections/README.md"
+  "examples/detections/AI-COMMAND-TELEMETRY.md"
   "examples/detections/sensitive-search-activity.yml"
   "examples/detections/failed-search-activity.yml"
+  "examples/detections/ai-agent/README.md"
+  "examples/detections/ai-agent/sensitive-data-enrichment.yml"
+  "examples/detections/ai-agent/downstream-action-pipeline.yml"
+  "examples/detections/ai-agent/dynamic-execution-pipeline.yml"
+  "examples/detections/ai-agent/ai-assisted-delete-pipeline.yml"
   ".agents/skills/querysplunk/SKILL.md"
   ".agents/skills/querysplunk/references/yaml-config.md"
+  ".agents/skills/querysplunk/references/ai-agent-detections.md"
   ".agents/skills/querysplunk/references/live-integration.md"
   ".agents/skills/querysplunk/references/release.md"
   ".agents/skills/querysplunk/references/installation.md"
@@ -40,7 +48,7 @@ required_common=(
 example_output_files=()
 while IFS= read -r output_file; do
   example_output_files+=("${output_file}")
-done < <(awk -F: '/^[[:space:]]*output_file:/ {gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); gsub(/^"|"$/, "", $2); print $2}' examples/health/*.yml examples/rest/*.yml examples/detections/*.yml examples/pentest/*.yml)
+done < <(awk -F: '/^[[:space:]]*output_file:/ {gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); gsub(/^"|"$/, "", $2); print $2}' examples/health/*.yml examples/rest/*.yml examples/detections/*.yml examples/detections/ai-agent/*.yml examples/pentest/*.yml)
 
 fail() {
   echo "ERROR: $*" >&2
@@ -54,7 +62,7 @@ check_forbidden_names() {
     echo "${listing}" >&2
     fail "${archive} contains local env or generated result artifacts"
   fi
-  if grep -Eq '^[^/]+/examples/(health|rest)/.*\.json$' <<<"${listing}"; then
+  if grep -Eq '^[^/]+/examples/(health|rest|detections|pentest)/.*\.json$' <<<"${listing}"; then
     echo "${listing}" >&2
     fail "${archive} contains generated JSON under examples"
   fi

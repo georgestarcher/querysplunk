@@ -1,0 +1,109 @@
+schema_version: "1"
+
+metadata:
+  id: querysplunk.detection.ai-agent.ai-assisted-delete-pipeline
+  title: AI enrichment preceding event hiding
+  description: Detects Splunk searches in which an ai command precedes a delete command in the same SPL pipeline. The ai command enriches search results; it does not perform the deletion itself. The optional presence of an ai_result_N reference provides context but is not required for a match.
+  category: detection
+  status: experimental
+  version: 1
+  author: querysplunk contributors
+  severity: critical
+  tags:
+    - ai-agent
+    - audit
+    - delete
+    - impact
+
+provenance:
+  source: Agent Threat Rules
+  source_rule_ids:
+    - ATR-2026-00711
+  source_url: https://github.com/Agent-Threat-Rule/agent-threat-rules
+  source_revision: 0c7a1f133fc176a732767363db65102aa0aae710
+  license: MIT
+  adaptation_notes: Adapts the destructive-system-action concept to Splunk audit telemetry. Splunk delete marks matching events as unavailable to subsequent searches but does not remove their underlying bucket data. This rule detects command ordering and does not claim that the ai command performed or autonomously selected the deletion.
+
+requirements:
+  platforms:
+    - splunk-cloud
+    - splunk-enterprise
+  indexes:
+    - _audit
+  fields:
+    - user
+    - app
+    - action
+    - info
+    - search
+  capabilities:
+    - search
+
+interpretation:
+  summary: Rows identify audited searches in which AI enrichment precedes the separate Splunk delete command.
+  false_positives:
+    - An authorized operator can deliberately use AI enrichment before a reviewed delete operation.
+    - Unusual quoting that the structural normalization cannot interpret can produce an investigative lead requiring manual confirmation.
+  recommended_actions:
+    - Confirm the user's delete_by_keyword capability, authorization, search scope, and the events made unavailable to subsequent searches.
+    - Privately inspect the original search and determine whether any ai_result field influenced event selection.
+    - Treat command ordering as a high-impact lead, not proof that the ai command performed or autonomously selected the deletion.
+
+app: search
+output_file: ai-assisted-delete-pipeline.json
+mode: job
+search: |
+  search index=_audit action=search (info=granted OR info=denied) search=*
+  | eval structural_search=replace(search, "(?s)\"(?:\\\\.|[^\"\\\\])*\"", "\"\"")
+  | eval ai_then_delete_pattern="(?is)\\|\\s*"."a"."i"."(?:\\s|$).*?\\|\\s*"."d"."e"."l"."e"."t"."e"."\\b"
+  | where match(structural_search, ai_then_delete_pattern)
+  | eval ai_result_pattern="(?i)\\b"."a"."i"."_result_[0-9]+\\b"
+  | eval ai_result_reference=if(match(structural_search, ai_result_pattern), "present", "not_observed")
+  | eval search_hash=sha256(search)
+  | eval app=coalesce(app, "unknown")
+  | stats min(_time) AS first_seen, max(_time) AS last_seen, count AS executions, values(info) AS audit_outcomes, values(ai_result_reference) AS ai_result_reference BY user, app, search_hash
+  | sort 0 -last_seen
+  | convert ctime(first_seen) ctime(last_seen)
+  | eval detection_id="querysplunk.detection.ai-agent.ai-assisted-delete-pipeline"
+  | eval finding="An ai command precedes a delete command in the same SPL pipeline."
+  | head 100
+  | table detection_id, first_seen, last_seen, user, app, search_hash, executions, audit_outcomes, ai_result_reference, finding
+
+dispatch:
+  earliest_time: "-24h"
+  latest_time: "now"
+
+results:
+  endpoint: auto
+  output_mode: json
+  count: 0
+  offset: 0
+
+result_handling:
+  classification: sensitive
+  contains_credentials: false
+  agent_display: summary_only
+  recommended_file_mode: "0600"
+  retention: temporary
+
+result_contract:
+  required_fields:
+    - detection_id
+    - first_seen
+    - last_seen
+    - user
+    - app
+    - search_hash
+    - executions
+    - audit_outcomes
+    - ai_result_reference
+    - finding
+  allow_empty: true
+  maximum_rows: 100
+
+safety:
+  allow_old_earliest: false
+  allow_index_wildcard: false
+
+diagnostics:
+  search_log: summary

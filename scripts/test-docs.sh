@@ -20,18 +20,10 @@ actual_version=$("$binary" -version)
 [ "$actual_version" = "querysplunk version=${version} commit=${commit}" ] || fail "release metadata output drifted"
 
 "$binary" -h >"${tmp_dir}/help.txt" 2>&1
-awk '/^  -[a-z]/ {print $1}' "${tmp_dir}/help.txt" | sort -u >"${tmp_dir}/help-flags"
-awk '/^  -[a-z]/ {print $1}' README.md | sort -u >"${tmp_dir}/readme-flags"
-comm -23 "${tmp_dir}/help-flags" "${tmp_dir}/readme-flags" >"${tmp_dir}/missing-readme-flags"
-comm -13 "${tmp_dir}/help-flags" "${tmp_dir}/readme-flags" >"${tmp_dir}/stale-readme-flags"
-if [ -s "${tmp_dir}/missing-readme-flags" ]; then
-  cat "${tmp_dir}/missing-readme-flags" >&2
-  fail "CLI flags are missing from the README help snapshot"
-fi
-if [ -s "${tmp_dir}/stale-readme-flags" ]; then
-  cat "${tmp_dir}/stale-readme-flags" >&2
-  fail "README help snapshot contains stale CLI flags"
-fi
+grep -F 'Run `querysplunk -h` for the full CLI reference.' README.md >/dev/null || fail "README does not point users to the complete CLI help"
+for required_flag in -validate-config -json-events -allow-old-earliest -allow-index-wildcard -job-sid; do
+  grep -F -- "$required_flag" README.md >/dev/null || fail "README is missing key workflow flag ${required_flag}"
+done
 
 ./install.sh --help >"${tmp_dir}/install-help.txt"
 check_installer_option() {
@@ -64,7 +56,7 @@ unset SPLUNKBASEURL SPLUNKTOKEN SPLUNKUSERNAME SPLUNKPASSWORD SPLUNKAPP || true
 "$binary" -validate-config "${tmp_dir}/generated.yml" >"${tmp_dir}/generated-plan.yml"
 metadata_ids="${tmp_dir}/oob-metadata-ids"
 : >"$metadata_ids"
-for config in examples/health/*.yml examples/rest/*.yml examples/detections/*.yml examples/pentest/*.yml \
+for config in examples/health/*.yml examples/rest/*.yml examples/detections/*.yml examples/detections/ai-agent/*.yml examples/pentest/*.yml \
   .agents/skills/querysplunk/templates/long-running-successful-searches.yml \
   .agents/skills/querysplunk/templates/recent-search-job-failures.yml; do
   "$binary" -validate-config "$config" >"${tmp_dir}/$(basename "$config").plan.yml"
@@ -78,7 +70,17 @@ for config in examples/health/*.yml examples/rest/*.yml examples/detections/*.ym
   [ -n "$metadata_id" ] || fail "$config is missing metadata.id"
   printf '%s\n' "$metadata_id" >>"$metadata_ids"
 
-  grep -Fx '  source_url: https://github.com/georgestarcher/querysplunk' "$config" >/dev/null || fail "$config is missing its canonical provenance source_url"
+  case "$config" in
+    examples/detections/ai-agent/*.yml)
+      grep -Fx '  source: Agent Threat Rules' "$config" >/dev/null || fail "$config is missing ATR provenance"
+      grep -Fx '  source_url: https://github.com/Agent-Threat-Rule/agent-threat-rules' "$config" >/dev/null || fail "$config is missing its ATR source_url"
+      grep -Fx '  source_revision: 0c7a1f133fc176a732767363db65102aa0aae710' "$config" >/dev/null || fail "$config is missing its pinned ATR revision"
+      grep -Eq '^  adaptation_notes: [^[:space:]].*$' "$config" || fail "$config is missing adaptation notes"
+      ;;
+    *)
+      grep -Fx '  source_url: https://github.com/georgestarcher/querysplunk' "$config" >/dev/null || fail "$config is missing its canonical provenance source_url"
+      ;;
+  esac
   grep -Fx '  license: MIT' "$config" >/dev/null || fail "$config is missing its provenance license"
   grep -Fx '  recommended_file_mode: "0600"' "$config" >/dev/null || fail "$config does not recommend owner-only result files"
   grep -Eq '^  maximum_rows: [1-9][0-9]*$' "$config" || fail "$config is missing a positive result row contract"
@@ -92,6 +94,7 @@ grep -Fx 'name: querysplunk' "${skill_dir}/SKILL.md" >/dev/null || fail "skill n
 grep -Eq '^description:[[:space:]]+[^[:space:]].*$' "${skill_dir}/SKILL.md" || fail "skill description frontmatter is invalid"
 for required in \
   references/health-diagnostics.md \
+  references/ai-agent-detections.md \
   references/installation.md \
   references/live-integration.md \
   references/preflight-and-recovery.md \
@@ -104,7 +107,7 @@ for required in \
   [ -f "${skill_dir}/${required}" ] || fail "skill is missing ${required}"
 done
 
-grep -F '| savedsearch "' README.md >/dev/null || fail "README savedsearch example is missing the generating pipe"
+grep -F '[Project wiki](https://github.com/georgestarcher/querysplunk/wiki)' README.md >/dev/null || fail "README does not link to the project wiki for deeper workflows"
 grep -F 'Never use direct token-bearing `curl`' "${skill_dir}/references/rest-inspection.md" >/dev/null || fail "REST inspection reference is missing the direct-call safety boundary"
 grep -F 'Resolve at most five levels' "${skill_dir}/references/rest-inspection.md" >/dev/null || fail "REST inspection reference is missing its recursion limit"
 grep -F 'complete stanza title including arity' "${skill_dir}/references/rest-inspection.md" >/dev/null || fail "REST inspection reference does not distinguish macro arity"
@@ -140,10 +143,14 @@ for config in examples/pentest/*.yml; do
   grep -Fx '  contains_credentials: true' "$config" >/dev/null || fail "$config does not declare credential-bearing output"
   grep -Fx '  agent_display: do_not_display' "$config" >/dev/null || fail "$config does not prohibit raw agent display"
 done
-for config in examples/detections/*.yml; do
+for config in examples/detections/*.yml examples/detections/ai-agent/*.yml; do
   grep -Fx '  classification: sensitive' "$config" >/dev/null || fail "$config does not classify detection output as sensitive"
   grep -Fx '  agent_display: summary_only' "$config" >/dev/null || fail "$config does not restrict agent display to a summary"
 done
+grep -F 'Copyright (c) 2026 ATR Contributors' THIRD_PARTY_NOTICES.md >/dev/null || fail "ATR copyright notice is missing"
+grep -F 'MIT License' THIRD_PARTY_NOTICES.md >/dev/null || fail "ATR MIT license notice is missing"
+grep -F 'does not independently email' examples/detections/ai-agent/README.md >/dev/null || fail "AI-agent guide does not preserve the ai command boundary"
+grep -F 'AI-derived dynamic execution only when' "${skill_dir}/references/ai-agent-detections.md" >/dev/null || fail "AI-agent skill reference does not preserve the action evidence boundary"
 if grep -REn '(first|last|earliest|latest)\((_time|[^)]*_epoch)\)' examples --include='*.yml' .agents/skills/querysplunk/templates --include='*.yml'; then
   fail "YAML searches must use numeric min/max aggregation for epoch timestamps"
 fi
