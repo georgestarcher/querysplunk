@@ -15,6 +15,9 @@ func TestAIAssistedDeleteDetectionFixtures(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load AI-assisted delete detection: %v", err)
 	}
+	if !strings.Contains(config.Search, "| convert ctime(first_seen) ctime(last_seen)") {
+		t.Fatal("AI-assisted delete detection must use whitespace-separated convert functions")
+	}
 
 	commandOrder := regexp.MustCompile(`(?is)\|\s*ai(?:\s|$).*?\|\s*delete\b`)
 	quotedString := regexp.MustCompile(`(?s)"(?:\\.|[^"\\])*"`)
