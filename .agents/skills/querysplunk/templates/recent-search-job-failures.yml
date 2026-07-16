@@ -40,6 +40,25 @@ interpretation:
   - Confirm the root cause in the retained log, remediate the search or dependency,
     and validate the next scheduled execution.
 
+result_handling:
+  classification: sensitive
+  contains_credentials: false
+  agent_display: summary_only
+  recommended_file_mode: "0600"
+  retention: temporary
+result_contract:
+  required_fields:
+  - failure_time
+  - app
+  - savedsearch_name
+  - sid
+  - runtime_seconds
+  - errmsg
+  - ai_result_1
+  - throttle_key
+  allow_empty: true
+  maximum_rows: 200
+
 app: Splunk_ML_Toolkit
 output_file: recent-search-job-failures.json
 mode: job

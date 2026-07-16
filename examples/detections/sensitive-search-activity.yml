@@ -42,6 +42,26 @@ interpretation:
   - Confirm the user's authorization, the search purpose, and whether sensitive results
     were exported or shared.
 
+result_handling:
+  classification: sensitive
+  contains_credentials: false
+  agent_display: summary_only
+  recommended_file_mode: "0600"
+  retention: temporary
+result_contract:
+  required_fields:
+  - first_seen_epoch
+  - last_seen_epoch
+  - event_count
+  - activity
+  - user
+  - host
+  - info
+  - search_type
+  - search
+  allow_empty: true
+  maximum_rows: 200
+
 app: search
 output_file: detection-sensitive-search-activity.json
 mode: job

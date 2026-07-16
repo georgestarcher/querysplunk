@@ -35,6 +35,23 @@ interpretation:
   - Use app, owner, and sharing fields to select the intended definition before inspecting
     lookup contents.
 
+result_handling:
+  classification: internal
+  contains_credentials: false
+  agent_display: bounded_summary
+  recommended_file_mode: "0600"
+  retention: temporary
+result_contract:
+  required_fields:
+  - title
+  - filename
+  - collection
+  - external_type
+  - eai:appName
+  - eai:userName
+  allow_empty: true
+  maximum_rows: 200
+
 app: search
 output_file: lookup-definitions.json
 mode: job

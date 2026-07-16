@@ -41,6 +41,30 @@ interpretation:
   - Inspect the affected action configuration, destination health, permissions, and
     subsequent successful executions.
 
+result_handling:
+  classification: internal
+  contains_credentials: false
+  agent_display: bounded_summary
+  recommended_file_mode: "0600"
+  retention: temporary
+result_contract:
+  required_fields:
+  - first_seen_epoch
+  - last_seen_epoch
+  - failure_count
+  - app
+  - action_name
+  - action_mode
+  - action_status
+  - search_name
+  - user
+  - component
+  - signature
+  - average_duration_ms
+  - maximum_duration_ms
+  allow_empty: true
+  maximum_rows: 200
+
 app: search
 output_file: audit-failed-modular-actions.json
 mode: job

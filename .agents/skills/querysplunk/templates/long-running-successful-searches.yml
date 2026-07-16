@@ -42,6 +42,24 @@ interpretation:
   - Review the runtime-to-cron ratio, search-log bottlenecks, scheduler configuration,
     and workload placement.
 
+result_handling:
+  classification: sensitive
+  contains_credentials: false
+  agent_display: summary_only
+  recommended_file_mode: "0600"
+  retention: temporary
+result_contract:
+  required_fields:
+  - app
+  - savedsearch_name
+  - sid
+  - runtime_seconds
+  - observed_gap_seconds
+  - runtime_percent_of_gap
+  - ai_result_1
+  allow_empty: true
+  maximum_rows: 200
+
 app: Splunk_ML_Toolkit
 output_file: long-running-successful-searches.json
 mode: job

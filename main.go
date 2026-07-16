@@ -256,7 +256,9 @@ searches unless acknowledged with -allow-old-earliest, -allow-index-wildcard,
 or YAML safety.allow_old_earliest / safety.allow_index_wildcard.
 
 Generated YAML uses schema version 1. Descriptive OOB metadata is optional for
-user-created search files and never contains credentials.
+user-created search files and never contains credentials. Result handling can
+classify sensitive output, and result contracts can validate supported JSON
+response shapes.
 
 Options:`)
 	flag.PrintDefaults()

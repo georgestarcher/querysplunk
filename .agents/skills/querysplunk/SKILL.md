@@ -50,6 +50,9 @@ use `query.UnsafeAllowAll()` without explicit user authorization.
   evidence. Summarize bounded findings without pasting complete SPL, private
   object names, or unrestricted result bodies into chat.
 - Never add secrets to YAML configs.
+- Treat `result_handling` as an enforced presentation boundary: never display raw output when `agent_display` is `do_not_display`, and provide only the permitted summary level for `bounded_summary` or `summary_only`.
+- Treat files classified `secret` or declaring `contains_credentials: true` as credential material. Report only the path, structural contract outcome, bounded row count, and remediation; do not paste raw rows into chat.
+- Do not weaken or remove `result_contract` to force a stale search to pass. Explain missing fields, unexpected row volume, malformed JSON, or an empty-result policy failure and fix the search or contract deliberately.
 - Warn before running a search that has no apparent `earliest` or `latest` time bounds.
 - Prefer bounded searches using SPL time modifiers or YAML `dispatch.earliest_time` and `dispatch.latest_time`.
 - Expect querysplunk to block `earliest` values older than one year unless `-allow-old-earliest` or YAML `safety.allow_old_earliest` is set.

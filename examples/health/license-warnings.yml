@@ -35,6 +35,17 @@ interpretation:
   - Check current license usage and pool status, then resolve sustained quota or entitlement
     problems.
 
+result_handling:
+  classification: internal
+  contains_credentials: false
+  agent_display: bounded_summary
+  recommended_file_mode: "0600"
+  retention: temporary
+result_contract:
+  required_fields: []
+  allow_empty: true
+  maximum_rows: 200
+
 app: search
 output_file: license-warnings.json
 mode: job

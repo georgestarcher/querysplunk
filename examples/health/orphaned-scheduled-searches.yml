@@ -36,6 +36,27 @@ interpretation:
   - Assign an appropriate active owner or disable the schedule after confirming business
     purpose and app context.
 
+result_handling:
+  classification: internal
+  contains_credentials: false
+  agent_display: bounded_summary
+  recommended_file_mode: "0600"
+  retention: temporary
+result_contract:
+  required_fields:
+  - title
+  - app
+  - owner
+  - orphan
+  - disabled
+  - is_scheduled
+  - cron_schedule
+  - alert_type
+  - actions
+  - next_scheduled_time
+  allow_empty: true
+  maximum_rows: 200
+
 app: search
 output_file: orphaned-scheduled-searches.json
 mode: job

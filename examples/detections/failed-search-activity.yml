@@ -41,6 +41,26 @@ interpretation:
   - Review repeated failures, affected users, search content sensitivity, and surrounding
     audit activity.
 
+result_handling:
+  classification: sensitive
+  contains_credentials: false
+  agent_display: summary_only
+  recommended_file_mode: "0600"
+  retention: temporary
+result_contract:
+  required_fields:
+  - first_seen_epoch
+  - last_seen_epoch
+  - failure_count
+  - user
+  - host
+  - search_type
+  - source
+  - sourcetype
+  - search
+  allow_empty: true
+  maximum_rows: 200
+
 app: search
 output_file: detection-failed-search-activity.json
 mode: job

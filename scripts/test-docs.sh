@@ -70,7 +70,7 @@ for config in examples/health/*.yml examples/rest/*.yml examples/detections/*.ym
   "$binary" -validate-config "$config" >"${tmp_dir}/$(basename "$config").plan.yml"
 
   grep -Fx 'schema_version: "1"' "$config" >/dev/null || fail "$config is missing schema_version 1"
-  for block in metadata requirements provenance interpretation; do
+  for block in metadata requirements provenance interpretation result_handling result_contract; do
     grep -Eq "^${block}:$" "$config" || fail "$config is missing its $block block"
   done
 
@@ -80,6 +80,8 @@ for config in examples/health/*.yml examples/rest/*.yml examples/detections/*.ym
 
   grep -Fx '  source_url: https://github.com/georgestarcher/querysplunk' "$config" >/dev/null || fail "$config is missing its canonical provenance source_url"
   grep -Fx '  license: MIT' "$config" >/dev/null || fail "$config is missing its provenance license"
+  grep -Fx '  recommended_file_mode: "0600"' "$config" >/dev/null || fail "$config does not recommend owner-only result files"
+  grep -Eq '^  maximum_rows: [1-9][0-9]*$' "$config" || fail "$config is missing a positive result row contract"
 done
 duplicate_metadata_ids=$(sort "$metadata_ids" | uniq -d)
 [ -z "$duplicate_metadata_ids" ] || fail "duplicate bundled metadata IDs: $duplicate_metadata_ids"
@@ -132,6 +134,15 @@ for config in examples/pentest/possible-password-paste-by-app.yml examples/pente
   grep -F 'match(failed_user, "[^A-Za-z0-9]")' "${config}" >/dev/null || fail "${config} does not require a symbol in the failed username"
   grep -F 'match(user, "^[A-Za-z0-9]+$")' "${config}" >/dev/null || fail "${config} does not require an alphanumeric successful username"
   grep -F 'seconds_to_success<=300' "${config}" >/dev/null || fail "${config} does not bound the failure-to-success sequence"
+done
+for config in examples/pentest/*.yml; do
+  grep -Fx '  classification: secret' "$config" >/dev/null || fail "$config does not classify credential-bearing pentest output as secret"
+  grep -Fx '  contains_credentials: true' "$config" >/dev/null || fail "$config does not declare credential-bearing output"
+  grep -Fx '  agent_display: do_not_display' "$config" >/dev/null || fail "$config does not prohibit raw agent display"
+done
+for config in examples/detections/*.yml; do
+  grep -Fx '  classification: sensitive' "$config" >/dev/null || fail "$config does not classify detection output as sensitive"
+  grep -Fx '  agent_display: summary_only' "$config" >/dev/null || fail "$config does not restrict agent display to a summary"
 done
 if grep -REn '(first|last|earliest|latest)\((_time|[^)]*_epoch)\)' examples --include='*.yml' .agents/skills/querysplunk/templates --include='*.yml'; then
   fail "YAML searches must use numeric min/max aggregation for epoch timestamps"
