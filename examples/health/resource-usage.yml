@@ -58,6 +58,7 @@ mode: job
 search: |
   | rest /services/server/status/resource-usage
   | table title, cpu_*, mem_*, process_type, instance
+  | head 200
 results:
   endpoint: auto
   output_mode: json

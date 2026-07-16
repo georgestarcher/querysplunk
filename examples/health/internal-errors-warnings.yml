@@ -53,6 +53,7 @@ search: |
   search index=_internal earliest=-1h (log_level=error OR log_level=warn*)
   | stats count, min(_time) AS first_seen_epoch, max(_time) AS last_seen_epoch, latest(_raw) AS latest_message BY host, source, sourcetype, log_level, component
   | sort - count
+  | head 200
 dispatch:
   earliest_time: "-1h"
   latest_time: "now"

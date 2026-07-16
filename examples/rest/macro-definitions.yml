@@ -59,6 +59,7 @@ mode: job
 search: |
   | rest /servicesNS/-/search/configs/conf-macros count=2 strict=true splunk_server=local search="title=example_macro"
   | table title, definition, args, eai:appName, eai:userName
+  | head 200
 results:
   endpoint: auto
   output_mode: json

@@ -66,6 +66,7 @@ search: |
   | where orphan=1 AND is_scheduled=1
   | table title, app, owner, orphan, disabled, is_scheduled, cron_schedule, alert_type, actions, next_scheduled_time
   | sort 0 app title
+  | head 200
 results:
   endpoint: auto
   output_mode: json

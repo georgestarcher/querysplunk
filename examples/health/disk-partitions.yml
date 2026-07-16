@@ -57,6 +57,7 @@ mode: job
 search: |
   | rest /services/server/status/partitions-space
   | table title, mount_point, available, capacity, free, total, used
+  | head 200
 results:
   endpoint: auto
   output_mode: json

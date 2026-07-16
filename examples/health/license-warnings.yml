@@ -53,6 +53,7 @@ search: |
   search index=_internal earliest=-24h (component=LicenseUsage OR component=LicenseManager)
   | stats count, min(_time) AS first_seen_epoch, max(_time) AS last_seen_epoch, latest(_raw) AS latest_message BY host, component, log_level
   | sort - count
+  | head 200
 dispatch:
   earliest_time: "-24h"
   latest_time: "now"

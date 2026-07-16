@@ -58,6 +58,7 @@ mode: job
 search: |
   | rest /servicesNS/-/search/data/transforms/lookups count=2 strict=true splunk_server=local search="title=example_lookup"
   | table title, filename, collection, external_type, eai:appName, eai:userName
+  | head 200
 results:
   endpoint: auto
   output_mode: json

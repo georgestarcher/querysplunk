@@ -56,6 +56,7 @@ mode: job
 search: |
   | rest /services/server/health/splunkd/details
   | table title, feature, health, status, message, root_cause
+  | head 200
 results:
   endpoint: auto
   output_mode: json

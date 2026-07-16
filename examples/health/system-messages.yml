@@ -57,6 +57,7 @@ mode: job
 search: |
   | rest /services/messages count=100 strict=true splunk_server=local
   | table title, message, severity, server, timeCreated_iso
+  | head 200
 results:
   endpoint: auto
   output_mode: json
