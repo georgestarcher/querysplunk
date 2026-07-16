@@ -100,6 +100,9 @@ func TestValidateResultContractShapesAndFailures(t *testing.T) {
 	}{
 		{name: "job envelope", body: `{"results":[{"name":"one"},{"name":"two"}]}`, contract: query.ResultContract{RequiredFields: []string{"name"}, MaximumRows: 2}, rows: 2},
 		{name: "export frames", body: "{\"result\":{\"name\":\"one\"}}\n{\"result\":{\"name\":\"two\"}}\n", contract: query.ResultContract{RequiredFields: []string{"name"}, MaximumRows: 2}, rows: 2},
+		{name: "export message and result frames", body: "{\"messages\":[{\"type\":\"WARN\",\"text\":\"do-not-leak\"}]}\n{\"result\":{\"name\":\"one\"}}\n", contract: query.ResultContract{RequiredFields: []string{"name"}}, mode: "export", rows: 1},
+		{name: "export message-only allowed", body: `{"messages":[{"type":"WARN","text":"do-not-leak"}]}`, contract: query.ResultContract{AllowEmpty: true}, mode: "export", rows: 0},
+		{name: "export message-only denied", body: `{"messages":[{"type":"WARN","text":"do-not-leak"}]}`, contract: query.ResultContract{}, mode: "export", kind: query.ResultContractEmpty},
 		{name: "empty allowed", body: `{"results":[]}`, contract: query.ResultContract{AllowEmpty: true}, rows: 0},
 		{name: "empty denied", body: `{"results":[]}`, contract: query.ResultContract{}, kind: query.ResultContractEmpty},
 		{name: "empty export allowed", body: "", contract: query.ResultContract{AllowEmpty: true}, mode: "export", rows: 0},
