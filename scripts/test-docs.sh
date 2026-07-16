@@ -20,18 +20,10 @@ actual_version=$("$binary" -version)
 [ "$actual_version" = "querysplunk version=${version} commit=${commit}" ] || fail "release metadata output drifted"
 
 "$binary" -h >"${tmp_dir}/help.txt" 2>&1
-awk '/^  -[a-z]/ {print $1}' "${tmp_dir}/help.txt" | sort -u >"${tmp_dir}/help-flags"
-awk '/^  -[a-z]/ {print $1}' README.md | sort -u >"${tmp_dir}/readme-flags"
-comm -23 "${tmp_dir}/help-flags" "${tmp_dir}/readme-flags" >"${tmp_dir}/missing-readme-flags"
-comm -13 "${tmp_dir}/help-flags" "${tmp_dir}/readme-flags" >"${tmp_dir}/stale-readme-flags"
-if [ -s "${tmp_dir}/missing-readme-flags" ]; then
-  cat "${tmp_dir}/missing-readme-flags" >&2
-  fail "CLI flags are missing from the README help snapshot"
-fi
-if [ -s "${tmp_dir}/stale-readme-flags" ]; then
-  cat "${tmp_dir}/stale-readme-flags" >&2
-  fail "README help snapshot contains stale CLI flags"
-fi
+grep -F 'Run `querysplunk -h` for the full CLI reference.' README.md >/dev/null || fail "README does not point users to the complete CLI help"
+for required_flag in -validate-config -json-events -allow-old-earliest -allow-index-wildcard -job-sid; do
+  grep -F -- "$required_flag" README.md >/dev/null || fail "README is missing key workflow flag ${required_flag}"
+done
 
 ./install.sh --help >"${tmp_dir}/install-help.txt"
 check_installer_option() {
@@ -115,7 +107,7 @@ for required in \
   [ -f "${skill_dir}/${required}" ] || fail "skill is missing ${required}"
 done
 
-grep -F '| savedsearch "' README.md >/dev/null || fail "README savedsearch example is missing the generating pipe"
+grep -F '[Project wiki](https://github.com/georgestarcher/querysplunk/wiki)' README.md >/dev/null || fail "README does not link to the project wiki for deeper workflows"
 grep -F 'Never use direct token-bearing `curl`' "${skill_dir}/references/rest-inspection.md" >/dev/null || fail "REST inspection reference is missing the direct-call safety boundary"
 grep -F 'Resolve at most five levels' "${skill_dir}/references/rest-inspection.md" >/dev/null || fail "REST inspection reference is missing its recursion limit"
 grep -F 'complete stanza title including arity' "${skill_dir}/references/rest-inspection.md" >/dev/null || fail "REST inspection reference does not distinguish macro arity"
