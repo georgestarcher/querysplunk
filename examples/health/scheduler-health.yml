@@ -1,3 +1,43 @@
+schema_version: "1"
+metadata:
+  title: Scheduler health
+  description: Summarize scheduled-search completion, skip, and runtime behavior from
+    scheduler logs.
+  category: health
+  status: stable
+  version: 1
+  author: querysplunk contributors
+  severity: high
+  tags:
+  - scheduler
+  - skipped-search
+  - performance
+  id: querysplunk.health.scheduler-health
+requirements:
+  platforms:
+  - splunk-cloud
+  - splunk-enterprise
+  indexes:
+  - _internal
+  fields:
+  - savedsearch_name
+  - status
+  - run_time
+  - reason
+provenance:
+  source: querysplunk
+  source_url: https://github.com/georgestarcher/querysplunk
+  source_rule_ids: []
+  license: MIT
+interpretation:
+  summary: Rows summarize scheduler outcomes and runtime behavior for scheduled searches.
+  false_positives:
+  - Maintenance windows and intentionally disabled workloads can create expected gaps
+    or skips.
+  recommended_actions:
+  - Investigate repeated skips, runtime overlap, concurrency pressure, and search-specific
+    failures.
+
 app: search
 output_file: scheduler-health.json
 mode: job

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -22,9 +23,12 @@ import (
 )
 
 const (
-	maxYAMLBytes = 1 << 20
+	maxYAMLBytes         = 1 << 20
+	CurrentSchemaVersion = "1"
 	// SkeletonConfig is the secret-free YAML written by WriteSkeleton.
-	SkeletonConfig = `app: search
+	SkeletonConfig = `schema_version: "1"
+
+app: search
 output_file: splunkresults.json
 mode: job
 search: |
@@ -56,24 +60,70 @@ diagnostics:
 )
 
 var (
-	ErrInvalidConfig        = errors.New("invalid query configuration")
-	ErrSafetyViolation      = errors.New("query safety violation")
-	timeModifierPattern     = regexp.MustCompile(`(?i)(^|\s)(earliest|latest)\s*=`)
-	earliestPattern         = regexp.MustCompile(`(?i)(^|[\s(])earliest\s*=\s*("[^"]+"|'[^']+'|[^\s|,)]+)`)
-	indexWildcardPattern    = regexp.MustCompile(`(?i)(^|[\s(])index\s*=\s*("[*]"|'[*]'|[*])($|[\s|,)])`)
-	relativeEarliestPattern = regexp.MustCompile(`(?i)^-(\d+)(s|sec|secs|second|seconds|m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days|w|week|weeks|mon|month|months|q|qtr|quarter|quarters|y|yr|yrs|year|years)(@[a-z0-9]+)?$`)
+	ErrInvalidConfig            = errors.New("invalid query configuration")
+	ErrUnsupportedSchemaVersion = errors.New("unsupported query schema version")
+	ErrSafetyViolation          = errors.New("query safety violation")
+	timeModifierPattern         = regexp.MustCompile(`(?i)(^|\s)(earliest|latest)\s*=`)
+	earliestPattern             = regexp.MustCompile(`(?i)(^|[\s(])earliest\s*=\s*("[^"]+"|'[^']+'|[^\s|,)]+)`)
+	indexWildcardPattern        = regexp.MustCompile(`(?i)(^|[\s(])index\s*=\s*("[*]"|'[*]'|[*])($|[\s|,)])`)
+	relativeEarliestPattern     = regexp.MustCompile(`(?i)^-(\d+)(s|sec|secs|second|seconds|m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days|w|week|weeks|mon|month|months|q|qtr|quarter|quarters|y|yr|yrs|year|years)(@[a-z0-9]+)?$`)
+	metadataIDPattern           = regexp.MustCompile(`^[a-z0-9]+(?:[.-][a-z0-9]+)*$`)
+	metadataDatePattern         = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 )
 
 // Config is the querysplunk YAML schema. Credentials never belong here.
 type Config struct {
-	App         string      `json:"app" yaml:"app"`
-	OutputFile  string      `json:"output_file" yaml:"output_file"`
-	Mode        string      `json:"mode" yaml:"mode"`
-	Search      string      `json:"search" yaml:"search"`
-	Safety      Safety      `json:"safety" yaml:"safety"`
-	Dispatch    Dispatch    `json:"dispatch" yaml:"dispatch"`
-	Results     Results     `json:"results" yaml:"results"`
-	Diagnostics Diagnostics `json:"diagnostics" yaml:"diagnostics"`
+	SchemaVersion  string          `json:"schema_version,omitempty" yaml:"schema_version,omitempty"`
+	Metadata       *Metadata       `json:"metadata,omitempty" yaml:"metadata,omitempty"`
+	Requirements   *Requirements   `json:"requirements,omitempty" yaml:"requirements,omitempty"`
+	Provenance     *Provenance     `json:"provenance,omitempty" yaml:"provenance,omitempty"`
+	Interpretation *Interpretation `json:"interpretation,omitempty" yaml:"interpretation,omitempty"`
+	App            string          `json:"app" yaml:"app"`
+	OutputFile     string          `json:"output_file" yaml:"output_file"`
+	Mode           string          `json:"mode" yaml:"mode"`
+	Search         string          `json:"search" yaml:"search"`
+	Safety         Safety          `json:"safety" yaml:"safety"`
+	Dispatch       Dispatch        `json:"dispatch" yaml:"dispatch"`
+	Results        Results         `json:"results" yaml:"results"`
+	Diagnostics    Diagnostics     `json:"diagnostics" yaml:"diagnostics"`
+}
+
+type Metadata struct {
+	ID          string   `json:"id" yaml:"id"`
+	Title       string   `json:"title" yaml:"title"`
+	Description string   `json:"description" yaml:"description"`
+	Category    string   `json:"category" yaml:"category"`
+	Status      string   `json:"status" yaml:"status"`
+	Version     int      `json:"version" yaml:"version"`
+	Author      string   `json:"author" yaml:"author"`
+	Created     string   `json:"created,omitempty" yaml:"created,omitempty"`
+	Modified    string   `json:"modified,omitempty" yaml:"modified,omitempty"`
+	Severity    string   `json:"severity,omitempty" yaml:"severity,omitempty"`
+	Tags        []string `json:"tags,omitempty" yaml:"tags,omitempty"`
+}
+
+type Requirements struct {
+	Platforms    []string `json:"platforms,omitempty" yaml:"platforms,omitempty"`
+	Apps         []string `json:"apps,omitempty" yaml:"apps,omitempty"`
+	DataModels   []string `json:"data_models,omitempty" yaml:"data_models,omitempty"`
+	Indexes      []string `json:"indexes,omitempty" yaml:"indexes,omitempty"`
+	Fields       []string `json:"fields,omitempty" yaml:"fields,omitempty"`
+	Capabilities []string `json:"capabilities,omitempty" yaml:"capabilities,omitempty"`
+}
+
+type Provenance struct {
+	Source          string   `json:"source" yaml:"source"`
+	SourceURL       string   `json:"source_url" yaml:"source_url"`
+	SourceRuleIDs   []string `json:"source_rule_ids,omitempty" yaml:"source_rule_ids,omitempty"`
+	SourceRevision  string   `json:"source_revision,omitempty" yaml:"source_revision,omitempty"`
+	License         string   `json:"license" yaml:"license"`
+	AdaptationNotes string   `json:"adaptation_notes,omitempty" yaml:"adaptation_notes,omitempty"`
+}
+
+type Interpretation struct {
+	Summary            string   `json:"summary" yaml:"summary"`
+	FalsePositives     []string `json:"false_positives,omitempty" yaml:"false_positives,omitempty"`
+	RecommendedActions []string `json:"recommended_actions,omitempty" yaml:"recommended_actions,omitempty"`
 }
 
 type Safety struct {
@@ -99,6 +149,16 @@ type Results struct {
 type Diagnostics struct {
 	SearchLog     string `json:"search_log" yaml:"search_log"`
 	SearchLogFile string `json:"search_log_file" yaml:"search_log_file"`
+}
+
+type SchemaVersionError struct{ Version string }
+
+func (err *SchemaVersionError) Error() string {
+	return fmt.Sprintf("%s: %s %q; supported version is %q", ErrInvalidConfig, ErrUnsupportedSchemaVersion, err.Version, CurrentSchemaVersion)
+}
+
+func (err *SchemaVersionError) Is(target error) bool {
+	return target == ErrInvalidConfig || target == ErrUnsupportedSchemaVersion
 }
 
 // Overrides are applied after loading and before safety analysis. Nil pointers
@@ -239,6 +299,22 @@ func LoadFS(files fs.FS, path string) (Config, error) {
 
 // Validate checks schema semantics without applying deployment safety policy.
 func (config Config) Validate() error {
+	version := strings.TrimSpace(config.SchemaVersion)
+	if version != "" && version != CurrentSchemaVersion {
+		return &SchemaVersionError{Version: version}
+	}
+	if err := validateMetadata(config.Metadata); err != nil {
+		return err
+	}
+	if err := validateRequirements(config.Requirements); err != nil {
+		return err
+	}
+	if err := validateProvenance(config.Provenance); err != nil {
+		return err
+	}
+	if err := validateInterpretation(config.Interpretation); err != nil {
+		return err
+	}
 	if strings.TrimSpace(config.Search) == "" {
 		return fmt.Errorf("%w: search content is required", ErrInvalidConfig)
 	}
@@ -508,6 +584,9 @@ func DerivedSearchLogFile(outputFile string) string {
 }
 
 func defaults(config Config) Config {
+	if strings.TrimSpace(config.SchemaVersion) == "" {
+		config.SchemaVersion = CurrentSchemaVersion
+	}
 	if strings.TrimSpace(config.OutputFile) == "" {
 		config.OutputFile = "splunkresults.json"
 	}
@@ -549,8 +628,134 @@ func addInt(params map[string][]string, key string, value *int) {
 	}
 }
 func cloneConfig(config Config) Config {
+	if config.Metadata != nil {
+		metadata := *config.Metadata
+		metadata.Tags = append([]string(nil), config.Metadata.Tags...)
+		config.Metadata = &metadata
+	}
+	if config.Requirements != nil {
+		requirements := *config.Requirements
+		requirements.Platforms = append([]string(nil), config.Requirements.Platforms...)
+		requirements.Apps = append([]string(nil), config.Requirements.Apps...)
+		requirements.DataModels = append([]string(nil), config.Requirements.DataModels...)
+		requirements.Indexes = append([]string(nil), config.Requirements.Indexes...)
+		requirements.Fields = append([]string(nil), config.Requirements.Fields...)
+		requirements.Capabilities = append([]string(nil), config.Requirements.Capabilities...)
+		config.Requirements = &requirements
+	}
+	if config.Provenance != nil {
+		provenance := *config.Provenance
+		provenance.SourceRuleIDs = append([]string(nil), config.Provenance.SourceRuleIDs...)
+		config.Provenance = &provenance
+	}
+	if config.Interpretation != nil {
+		interpretation := *config.Interpretation
+		interpretation.FalsePositives = append([]string(nil), config.Interpretation.FalsePositives...)
+		interpretation.RecommendedActions = append([]string(nil), config.Interpretation.RecommendedActions...)
+		config.Interpretation = &interpretation
+	}
 	config.Dispatch.RequiredFields = append([]string(nil), config.Dispatch.RequiredFields...)
 	return config
+}
+
+func validateMetadata(metadata *Metadata) error {
+	if metadata == nil {
+		return nil
+	}
+	for _, required := range []struct {
+		name  string
+		value string
+	}{{"metadata.id", metadata.ID}, {"metadata.title", metadata.Title}, {"metadata.description", metadata.Description}, {"metadata.category", metadata.Category}, {"metadata.status", metadata.Status}, {"metadata.author", metadata.Author}} {
+		if strings.TrimSpace(required.value) == "" {
+			return fmt.Errorf("%w: %s is required when metadata is present", ErrInvalidConfig, required.name)
+		}
+	}
+	if !metadataIDPattern.MatchString(strings.TrimSpace(metadata.ID)) {
+		return fmt.Errorf("%w: metadata.id %q must be a lowercase namespaced identifier", ErrInvalidConfig, metadata.ID)
+	}
+	if metadata.Version < 1 {
+		return fmt.Errorf("%w: metadata.version must be at least 1", ErrInvalidConfig)
+	}
+	switch strings.TrimSpace(metadata.Status) {
+	case "draft", "experimental", "stable", "deprecated":
+	default:
+		return fmt.Errorf("%w: metadata.status %q must be draft, experimental, stable, or deprecated", ErrInvalidConfig, metadata.Status)
+	}
+	if severity := strings.TrimSpace(metadata.Severity); severity != "" {
+		switch severity {
+		case "informational", "low", "medium", "high", "critical":
+		default:
+			return fmt.Errorf("%w: metadata.severity %q must be informational, low, medium, high, or critical", ErrInvalidConfig, metadata.Severity)
+		}
+	}
+	for name, value := range map[string]string{"metadata.created": metadata.Created, "metadata.modified": metadata.Modified} {
+		if value = strings.TrimSpace(value); value != "" && !metadataDatePattern.MatchString(value) {
+			return fmt.Errorf("%w: %s %q must use YYYY-MM-DD", ErrInvalidConfig, name, value)
+		}
+	}
+	return validateStringList("metadata.tags", metadata.Tags)
+}
+
+func validateRequirements(requirements *Requirements) error {
+	if requirements == nil {
+		return nil
+	}
+	for _, list := range []struct {
+		name   string
+		values []string
+	}{{"requirements.platforms", requirements.Platforms}, {"requirements.apps", requirements.Apps}, {"requirements.data_models", requirements.DataModels}, {"requirements.indexes", requirements.Indexes}, {"requirements.fields", requirements.Fields}, {"requirements.capabilities", requirements.Capabilities}} {
+		if err := validateStringList(list.name, list.values); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateProvenance(provenance *Provenance) error {
+	if provenance == nil {
+		return nil
+	}
+	for _, required := range []struct {
+		name  string
+		value string
+	}{{"provenance.source", provenance.Source}, {"provenance.source_url", provenance.SourceURL}, {"provenance.license", provenance.License}} {
+		if strings.TrimSpace(required.value) == "" {
+			return fmt.Errorf("%w: %s is required when provenance is present", ErrInvalidConfig, required.name)
+		}
+	}
+	parsed, err := url.ParseRequestURI(strings.TrimSpace(provenance.SourceURL))
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "https" && parsed.Scheme != "http") {
+		return fmt.Errorf("%w: provenance.source_url %q must be an absolute HTTP(S) URL", ErrInvalidConfig, provenance.SourceURL)
+	}
+	return validateStringList("provenance.source_rule_ids", provenance.SourceRuleIDs)
+}
+
+func validateInterpretation(interpretation *Interpretation) error {
+	if interpretation == nil {
+		return nil
+	}
+	if strings.TrimSpace(interpretation.Summary) == "" {
+		return fmt.Errorf("%w: interpretation.summary is required when interpretation is present", ErrInvalidConfig)
+	}
+	if err := validateStringList("interpretation.false_positives", interpretation.FalsePositives); err != nil {
+		return err
+	}
+	return validateStringList("interpretation.recommended_actions", interpretation.RecommendedActions)
+}
+
+func validateStringList(name string, values []string) error {
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return fmt.Errorf("%w: %s cannot contain an empty value", ErrInvalidConfig, name)
+		}
+		if _, ok := seen[value]; ok {
+			return fmt.Errorf("%w: %s contains duplicate value %q", ErrInvalidConfig, name, value)
+		}
+		seen[value] = struct{}{}
+	}
+	return nil
 }
 func cloneOptions(options splunk.SearchOptions) splunk.SearchOptions {
 	options.DispatchParams = cloneParams(options.DispatchParams)

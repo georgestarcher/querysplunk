@@ -1,3 +1,42 @@
+schema_version: "1"
+metadata:
+  title: Macro definitions
+  description: Inspect a bounded set of matching search macro definitions and namespace
+    context.
+  category: rest
+  status: stable
+  version: 1
+  author: querysplunk contributors
+  severity: informational
+  tags:
+  - macro
+  - knowledge-object
+  - rest
+  id: querysplunk.rest.macro-definitions
+requirements:
+  platforms:
+  - splunk-cloud
+  - splunk-enterprise
+  fields:
+  - title
+  - definition
+  - args
+  - app
+  - owner
+  - sharing
+provenance:
+  source: querysplunk
+  source_url: https://github.com/georgestarcher/querysplunk
+  source_rule_ids: []
+  license: MIT
+interpretation:
+  summary: Rows expose matching macro definitions, arguments, and namespace context.
+  false_positives:
+  - Macros with the same base name but different arity or app context can all be valid.
+  recommended_actions:
+  - Resolve the complete stanza title and app context before expanding a macro into
+    another search.
+
 app: search
 output_file: macro-definitions.json
 mode: job

@@ -255,6 +255,9 @@ Safety controls block earliest values older than one year and explicit index=*
 searches unless acknowledged with -allow-old-earliest, -allow-index-wildcard,
 or YAML safety.allow_old_earliest / safety.allow_index_wildcard.
 
+Generated YAML uses schema version 1. Descriptive OOB metadata is optional for
+user-created search files and never contains credentials.
+
 Options:`)
 	flag.PrintDefaults()
 }
@@ -285,7 +288,7 @@ func main() {
 	flag.StringVar(&appContext, "app", "", "Override Splunk app context / namespace for the search")
 	flag.StringVar(&configFile, "config", "", "Run a structured YAML search config")
 	flag.StringVar(&validateConfigFile, "validate-config", "", "Validate a YAML search config offline and print its effective plan")
-	flag.StringVar(&writeConfigFile, "write-config", "", "Write a starter YAML search config and exit")
+	flag.StringVar(&writeConfigFile, "write-config", "", "Write a schema-versioned starter YAML search config and exit")
 	flag.StringVar(&earliestTime, "earliest", "", "Set dispatch earliest_time, such as -15m or 2026-07-10T00:00:00")
 	flag.StringVar(&latestTime, "latest", "", "Set dispatch latest_time, such as now")
 	flag.BoolVar(&allowOldEarliest, "allow-old-earliest", false, "Allow earliest times older than the default one-year safety limit")

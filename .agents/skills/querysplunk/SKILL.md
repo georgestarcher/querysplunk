@@ -28,6 +28,8 @@ assistant skill files after installation or upgrade.
 
 `querysplunk` runs Splunk searches from a plain SPL file or YAML config, writes the raw Splunk response body to disk, and can summarize `search.log` diagnostics for normal search jobs.
 
+Generated and bundled files use `schema_version: "1"`. Existing runtime-only YAML without a version remains valid and is interpreted as version 1. Bundled out-of-box searches also include `metadata`, `requirements`, `provenance`, and `interpretation`; use these blocks to select searches, explain prerequisites and sensitivity, and interpret results. Preserve provenance whenever a search is copied or adapted.
+
 It does not store credentials in YAML. Splunk connection settings must come from environment variables, `.env`, 1Password-backed local environment files, or GitHub Actions environment secrets.
 
 Go and AI-agent applications can use
@@ -127,7 +129,7 @@ Before live execution, read `references/preflight-and-recovery.md`. When
 creating or materially changing SPL, also read `references/spl-authoring.md`.
 
 1. Check that the YAML file exists.
-2. Read the YAML enough to identify `search`, `output_file`, `mode`, `safety`, dispatch bounds, and diagnostics settings.
+2. Read the YAML enough to identify `schema_version`, descriptive metadata and requirements, `search`, `output_file`, `mode`, `safety`, dispatch bounds, and diagnostics settings.
 3. Confirm there are no obvious secrets in the YAML.
 4. Run `querysplunk -validate-config <file>` and inspect the effective config and structured findings.
 5. Resolve validation errors or ask the user to authorize any required safety acknowledgement.

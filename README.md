@@ -405,6 +405,8 @@ Plain SPL files remain supported. Use `-config` when a search needs reusable
 settings beyond the SPL text, such as app context, output file, execution mode,
 dispatch parameters, result parameters, or search log diagnostics.
 
+querysplunk uses schema version `1` for generated and bundled YAML. Existing compact files without `schema_version` remain compatible and are interpreted as version 1. Reusable searches can include optional `metadata`, `requirements`, `provenance`, and `interpretation` blocks describing identity and lifecycle, prerequisites, origin and licensing, and how to interpret results. Bundled out-of-box searches include all four blocks; credentials never belong in them.
+
 ```bash
 querysplunk -config search.yml
 ```
@@ -444,9 +446,11 @@ way to see the supported YAML shape without copying an example by hand:
 querysplunk -write-config search.yml
 ```
 
-The generated file includes placeholders for app context, output file, search
+The generated schema-versioned file includes placeholders for app context, output file, search
 text, dispatch parameters, result parameters, execution mode, and diagnostics.
-It does not include secrets.
+It does not include secrets. Descriptive metadata remains optional for user-created files.
+
+The descriptive schema was inspired by the metadata and provenance discipline of [Agent Threat Rules](https://github.com/Agent-Threat-Rule/agent-threat-rules) at pinned revision [`0c7a1f133fc176a732767363db65102aa0aae710`](https://github.com/Agent-Threat-Rule/agent-threat-rules/tree/0c7a1f133fc176a732767363db65102aa0aae710), distributed under the [MIT license](https://github.com/Agent-Threat-Rule/agent-threat-rules/blob/0c7a1f133fc176a732767363db65102aa0aae710/LICENSE). This schema change copies no ATR rules or code; future adaptations must retain source-rule provenance and applicable notices.
 
 The command refuses to overwrite an existing file unless you also pass
 `-force`:
@@ -525,6 +529,40 @@ diagnostics:
 Secrets do not belong in YAML config. Continue to provide `SPLUNKBASEURL`,
 `SPLUNKTOKEN`, `SPLUNKUSERNAME`, and `SPLUNKPASSWORD` through environment
 variables or `.env`.
+
+The smallest valid configuration remains a search with its runtime fields. A reusable library entry can add the descriptive blocks, for example:
+
+```yaml
+schema_version: "1"
+metadata:
+  id: querysplunk.example.index-summary
+  title: Index summary
+  description: Summarize recent searchable events by index.
+  category: example
+  status: experimental
+  version: 1
+  author: querysplunk contributors
+  severity: informational
+  tags: [indexes]
+requirements:
+  platforms: [splunk-cloud, splunk-enterprise]
+  fields: [index, count]
+provenance:
+  source: querysplunk
+  source_url: https://github.com/georgestarcher/querysplunk
+  source_rule_ids: []
+  license: MIT
+interpretation:
+  summary: Each row reports recent event volume for one searchable index.
+  false_positives:
+    - Intentionally quiet indexes can have low volume.
+  recommended_actions:
+    - Compare unexpected changes with ingestion and retention configuration.
+app: search
+search: |-
+  | eventcount summarize=false
+  | table index, count
+```
 
 CLI flags override config values where both are set:
 
@@ -772,7 +810,7 @@ Options:
   -version
 	Print version and build metadata, then exit
   -write-config string
-    	Write a starter YAML search config and exit
+	Write a schema-versioned starter YAML search config and exit
 ```
 
 ### integration tests
