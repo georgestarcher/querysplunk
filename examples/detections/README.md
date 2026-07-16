@@ -17,11 +17,17 @@ data.
 
 ## AI-agent starter pack
 
-The experimental searches under `ai-agent/` identify sensitive-data
-enrichment, `ai` followed by a downstream action command, and explicit
-`ai_result_N` references near `map` or `script`. The `ai` command transforms
-search rows; it does not take those actions independently. Read the
-[starter-pack guide](ai-agent/README.md) before execution.
+The experimental searches under `ai-agent/` identify:
+
+- credential-bearing input that occurs before AI enrichment;
+- `ai` followed by a separate downstream action-capable command;
+- an exact `ai_result_N` field or `$ai_result_N$` substitution used by a later
+  `map` or `script` command; and
+- `ai` followed later by the separate Splunk `delete` command.
+
+The `ai` command transforms search rows; it does not take those actions
+independently. Read the [starter-pack guide](ai-agent/README.md) before
+execution.
 
 ## Splunk Audit Logs detections
 
@@ -61,8 +67,3 @@ querysplunk -config examples/detections/sensitive-search-activity.yml
 
 Both examples default to the last 24 hours and cap displayed detections at 200
 rows. Adjust those bounds deliberately for the investigation.
-
-The AI-agent starter pack also includes
-`ai-agent/ai-assisted-delete-pipeline.yml`. It detects an `ai` command
-followed later by `delete`, while preserving the distinction between AI
-enrichment and the separate event-hiding action.
