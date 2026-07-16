@@ -88,7 +88,7 @@ search: |
   | rex field=search max_match=0 "(?is)(?:^|\\|)\\s*(?<pipeline_command>(?:\"(?:\\\\.|[^\"\\\\])*\"|[^|])*)"
   | eval ai_command_index=mvfind(pipeline_command, "(?i)^ai(?:\\s|$)")
   | eval post_ai_commands=mvindex(pipeline_command, ai_command_index+1, mvcount(pipeline_command)-1)
-  | eval dynamic_command_block=mvfilter(match(post_ai_commands, "(?is)^(?:map|script)\\b.*(?:\\$?ai_result_[0-9]+\\$?)"))
+  | eval dynamic_command_block=mvfilter(match(post_ai_commands, "(?is)^(?:map|script)\\b.*(?:\\$ai_result_[0-9]+\\$|(?:^|[^A-Za-z0-9_$])ai_result_[0-9]+(?:$|[^A-Za-z0-9_$]))"))
   | where mvcount(dynamic_command_block)>0
   | eval dynamic_action=mvmap(dynamic_command_block, if(match(dynamic_command_block, "(?i)^map\\b"), "map", "script"))
   | eval dynamic_action=mvjoin(mvdedup(dynamic_action), ",")

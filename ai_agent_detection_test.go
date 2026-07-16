@@ -83,6 +83,9 @@ func TestAIAgentDetectionPatterns(t *testing.T) {
 				`search index=main | ai prompt="classify {message}" | map search="search index=review"`,
 				`search index=main | map search="search index=review value=\"$ai_result_1$\"" | ai prompt="classify {message}"`,
 				`search index=main | map search="search index=review value=\"$ai_result_1$\"" | ai prompt="classify {message}" | map search="search index=review"`,
+				`search index=main | ai prompt="classify {message}" | map search="search index=review value=previous_ai_result_1"`,
+				`search index=main | ai prompt="classify {message}" | script review.py not_ai_result_1`,
+				`search index=main | ai prompt="classify {message}" | script review.py ai_result_1_extra`,
 				`search index=main | ai prompt="classify {message}" | table ai_result_1`,
 			},
 		},
@@ -162,7 +165,7 @@ func dynamicArgumentsContainAIResult(search string) bool {
 	pipelineCommand := regexp.MustCompile(`(?is)(?:^|\|)\s*((?:"(?:\\.|[^"\\])*"|[^|])*)`)
 	aiCommand := regexp.MustCompile(`(?i)^ai(?:\s|$)`)
 	dynamicCommand := regexp.MustCompile(`(?i)^(?:map|script)\b`)
-	aiResult := regexp.MustCompile(`(?i)(?:\$?ai_result_[0-9]+\$?)`)
+	aiResult := regexp.MustCompile(`(?i)(?:\$ai_result_[0-9]+\$|(?:^|[^A-Za-z0-9_$])ai_result_[0-9]+(?:$|[^A-Za-z0-9_$]))`)
 	commands := pipelineCommand.FindAllStringSubmatch(search, -1)
 	aiCommandIndex := -1
 	for index, match := range commands {
