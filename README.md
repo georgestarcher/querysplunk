@@ -11,7 +11,7 @@ Use it when you want to:
 - resume or inspect an existing Splunk job by SID
 - let Codex or Claude Code prepare, validate, run, and summarize searches safely
 
-For deeper guidance, use the [project wiki](https://github.com/georgestarcher/querysplunk/wiki), [INSTALL.md](INSTALL.md), and the bundled examples.
+For deeper guidance, use the [project wiki](https://github.com/georgestarcher/querysplunk/wiki), [INSTALL.md](INSTALL.md), the [current release notes](RELEASE_NOTES.md), and the bundled examples.
 
 ## Install
 
@@ -156,9 +156,17 @@ Run `querysplunk -h` for the full CLI reference.
 
 ## YAML Searches
 
-A typical YAML config:
+Generated and bundled YAML uses `schema_version: "1"`. Existing runtime-only
+YAML remains valid and is interpreted as version 1. Bundled searches add
+`metadata`, `requirements`, `provenance`, `interpretation`, `result_handling`,
+and `result_contract` blocks so people, agents, and Go consumers can select and
+handle them consistently.
+
+A minimal runtime config:
 
 ```yaml
+schema_version: "1"
+
 app: search
 output_file: splunkresults.json
 mode: job
@@ -184,6 +192,25 @@ diagnostics:
 ```
 
 Bundled examples live under `examples/`. Health checks are in `examples/health/` and include notes about required Splunk access and Splunk Cloud caveats.
+
+## Bundled Search Library
+
+Release archives include reviewed YAML families for different operating
+contexts:
+
+- `examples/health/` contains bounded deployment, scheduler, message, orphaned
+  search, and audit-based health checks.
+- `examples/rest/` contains read-only saved-search, macro, and lookup
+  inspection workflows.
+- `examples/detections/` contains defender searches, Splunk AI telemetry
+  research, and the experimental AI-agent detection starter pack.
+- `examples/pentest/` contains explicitly authorized security-assessment
+  searches whose outputs can contain credentials and must not be displayed by
+  an assistant.
+
+Validate a bundled search offline before execution. Respect its
+`result_handling` classification and do not weaken its `result_contract` merely
+to force a result through.
 
 ## Splunk MCP Server
 
@@ -224,7 +251,10 @@ Proposed reusable YAML searches should use the saved-search review template and 
 
 ## More Documentation
 
+- [Current release notes](RELEASE_NOTES.md)
 - [Installation and upgrades](INSTALL.md)
 - [Health examples](examples/health/README.md)
+- [Defender detection examples](examples/detections/README.md)
+- [Authorized penetration-testing examples](examples/pentest/README.md)
 - [Project wiki](https://github.com/georgestarcher/querysplunk/wiki)
 - [AI-agent detections wiki](https://github.com/georgestarcher/querysplunk/wiki/AI-Agent-Detections)

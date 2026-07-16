@@ -7,6 +7,7 @@ expected_version="${2:-}"
 required_common=(
   "README.md"
   "INSTALL.md"
+  "RELEASE_NOTES.md"
   "THIRD_PARTY_NOTICES.md"
   "examples/health/README.md"
   "examples/health/splunkd-health.yml"

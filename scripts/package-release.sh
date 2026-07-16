@@ -21,7 +21,7 @@ dist_abs="$(cd "${dist_dir}" && pwd)"
 copy_bundle_files() {
   local package_dir="$1"
   local goos="$2"
-  cp README.md INSTALL.md THIRD_PARTY_NOTICES.md "${package_dir}/"
+  cp README.md INSTALL.md RELEASE_NOTES.md THIRD_PARTY_NOTICES.md "${package_dir}/"
   mkdir -p "${package_dir}/examples" "${package_dir}/.agents/skills"
   mkdir -p "${package_dir}/examples/health" "${package_dir}/examples/rest" "${package_dir}/examples/detections" "${package_dir}/examples/pentest"
   find examples/health -maxdepth 1 -type f \( -name '*.md' -o -name '*.yml' \) -exec cp {} "${package_dir}/examples/health/" \;

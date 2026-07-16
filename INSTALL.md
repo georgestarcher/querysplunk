@@ -2,6 +2,8 @@
 
 Release archives are self-contained. They do not require Go, a repository
 clone, administrator access, or knowledge of assistant skill directories.
+Read the bundled `RELEASE_NOTES.md` before an upgrade to understand new search
+families, result-handling requirements, and any operator action.
 
 Choose the archive for your computer:
 
@@ -89,6 +91,9 @@ Codex or `/querysplunk` in Claude Code, or ask naturally for help preparing or
 running a querysplunk search. The skill includes focused playbooks for
 preflight and recovery, SPL authoring, bounded result analysis, health
 diagnostics, and non-sensitive session handoff.
+The installed skill also understands the bundled schema metadata, result
+contracts, scheduled-search log analysis, read-only REST inspection, and
+AI-agent detection safeguards.
 
 Recommended first request:
 

@@ -108,6 +108,12 @@ for required in \
 done
 
 grep -F '[Project wiki](https://github.com/georgestarcher/querysplunk/wiki)' README.md >/dev/null || fail "README does not link to the project wiki for deeper workflows"
+grep -F '[Current release notes](RELEASE_NOTES.md)' README.md >/dev/null || fail "README does not link to the current release notes"
+grep -F 'schema_version: "1"' README.md >/dev/null || fail "README does not document schema version 1"
+grep -F '## Bundled Search Library' README.md >/dev/null || fail "README does not explain the bundled search library"
+grep -F '# querysplunk v2.3.0' RELEASE_NOTES.md >/dev/null || fail "release notes do not identify v2.3.0"
+grep -F 'result_handling' RELEASE_NOTES.md >/dev/null || fail "release notes do not describe result handling"
+grep -F -- '--notes-file RELEASE_NOTES.md' .github/workflows/release.yml >/dev/null || fail "release workflow does not publish curated release notes"
 grep -F 'Never use direct token-bearing `curl`' "${skill_dir}/references/rest-inspection.md" >/dev/null || fail "REST inspection reference is missing the direct-call safety boundary"
 grep -F 'Resolve at most five levels' "${skill_dir}/references/rest-inspection.md" >/dev/null || fail "REST inspection reference is missing its recursion limit"
 grep -F 'complete stanza title including arity' "${skill_dir}/references/rest-inspection.md" >/dev/null || fail "REST inspection reference does not distinguish macro arity"

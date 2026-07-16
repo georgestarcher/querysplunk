@@ -23,7 +23,10 @@ the SPL also references an `ai_result_N` field near `map` or `script`.
   before an external, alert, write, or script command. State that co-occurrence
   does not prove the downstream command consumed AI output.
 - Use `dynamic-execution-pipeline.yml` when the user asks whether AI-generated
-  result fields appear to flow into `map` or `script`.
+  result fields appear to flow into `map` or `script`. The search checks every
+  later dynamic command and requires an exact bare `ai_result_N` field or a
+  complete `$ai_result_N$` substitution. Prefixed and suffixed lookalike field
+  names are not evidence of AI-result data flow.
 
 ## Execute and report
 
