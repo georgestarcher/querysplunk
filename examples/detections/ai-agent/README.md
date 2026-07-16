@@ -94,3 +94,11 @@ deletion or acted autonomously.
 The detector constructs the command names from fragments and strips quoted
 strings before matching. This prevents the detector from matching its own SPL
 or a prompt that merely discusses the `delete` command.
+
+## Wiki and attribution
+
+See the
+[AI-agent detections wiki page](https://github.com/georgestarcher/querysplunk/wiki/AI-Agent-Detections)
+for a task-oriented overview. Source attribution remains embedded in each YAML
+file and in the repository's
+[third-party notices](../../../THIRD_PARTY_NOTICES.md).

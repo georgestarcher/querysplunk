@@ -953,3 +953,13 @@ For local release-style packages, run:
 make clean package VERSION=v2.1.0
 make verify-package VERSION=v2.1.0
 ```
+
+## Project wiki
+
+The [querysplunk wiki](https://github.com/georgestarcher/querysplunk/wiki)
+provides task-oriented navigation for installation, bundled examples, and
+AI-assistant use. Its
+[AI-agent detections page](https://github.com/georgestarcher/querysplunk/wiki/AI-Agent-Detections)
+summarizes the experimental starter pack, its safety boundaries, and the
+upstream Agent Threat Rules attribution. Versioned repository documentation and
+the provenance embedded in each YAML file remain the source of truth.
