@@ -192,7 +192,7 @@ func (prepared Prepared) ValidateResult(reader io.Reader) (ResultContractSummary
 	if reader == nil {
 		return ResultContractSummary{Enforced: true}, &ResultContractError{Kind: ResultContractInvalidJSON}
 	}
-	rows, err := validateJSONResultContract(reader, *prepared.config.ResultContract)
+	rows, err := validateJSONResultContract(reader, *prepared.config.ResultContract, prepared.config.Mode == "export")
 	return ResultContractSummary{Enforced: true, Rows: rows}, err
 }
 
@@ -248,7 +248,7 @@ func (prepared Prepared) searchToWithResultContract(ctx context.Context, client 
 	return result, nil
 }
 
-func validateJSONResultContract(reader io.Reader, contract ResultContract) (int, error) {
+func validateJSONResultContract(reader io.Reader, contract ResultContract, allowEmptyStream bool) (int, error) {
 	decoder := json.NewDecoder(reader)
 	decoder.UseNumber()
 	rows := 0
@@ -280,6 +280,9 @@ func validateJSONResultContract(reader io.Reader, contract ResultContract) (int,
 		}
 	}
 	if documents == 0 {
+		if !allowEmptyStream {
+			return 0, &ResultContractError{Kind: ResultContractInvalidJSON}
+		}
 		if contract.AllowEmpty {
 			return 0, nil
 		}

@@ -81,9 +81,9 @@ func TestResultHandlingValidationAndCredentialFinding(t *testing.T) {
 func TestValidateResultContractShapesAndFailures(t *testing.T) {
 	t.Parallel()
 
-	prepare := func(t *testing.T, contract query.ResultContract) query.Prepared {
+	prepare := func(t *testing.T, contract query.ResultContract, mode string) query.Prepared {
 		t.Helper()
-		prepared, err := query.Prepare(query.Config{Search: "| makeresults", ResultContract: &contract}, query.Overrides{}, query.SafetyPolicy{})
+		prepared, err := query.Prepare(query.Config{Mode: mode, Search: "| makeresults", ResultContract: &contract}, query.Overrides{}, query.SafetyPolicy{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -94,6 +94,7 @@ func TestValidateResultContractShapesAndFailures(t *testing.T) {
 		name     string
 		body     string
 		contract query.ResultContract
+		mode     string
 		rows     int
 		kind     query.ResultContractErrorKind
 	}{
@@ -101,8 +102,9 @@ func TestValidateResultContractShapesAndFailures(t *testing.T) {
 		{name: "export frames", body: "{\"result\":{\"name\":\"one\"}}\n{\"result\":{\"name\":\"two\"}}\n", contract: query.ResultContract{RequiredFields: []string{"name"}, MaximumRows: 2}, rows: 2},
 		{name: "empty allowed", body: `{"results":[]}`, contract: query.ResultContract{AllowEmpty: true}, rows: 0},
 		{name: "empty denied", body: `{"results":[]}`, contract: query.ResultContract{}, kind: query.ResultContractEmpty},
-		{name: "empty export allowed", body: "", contract: query.ResultContract{AllowEmpty: true}, rows: 0},
-		{name: "empty export denied", body: "", contract: query.ResultContract{}, kind: query.ResultContractEmpty},
+		{name: "empty export allowed", body: "", contract: query.ResultContract{AllowEmpty: true}, mode: "export", rows: 0},
+		{name: "empty export denied", body: "", contract: query.ResultContract{}, mode: "export", kind: query.ResultContractEmpty},
+		{name: "empty job response", body: "", contract: query.ResultContract{AllowEmpty: true}, mode: "job", kind: query.ResultContractInvalidJSON},
 		{name: "missing field", body: `{"results":[{"secret":"do-not-leak"}]}`, contract: query.ResultContract{RequiredFields: []string{"name"}}, kind: query.ResultContractMissingField},
 		{name: "row limit", body: `{"results":[{"name":"one"},{"name":"two"}]}`, contract: query.ResultContract{MaximumRows: 1}, kind: query.ResultContractRowLimit},
 		{name: "invalid JSON", body: `{"results":[`, contract: query.ResultContract{AllowEmpty: true}, kind: query.ResultContractInvalidJSON},
@@ -111,7 +113,7 @@ func TestValidateResultContractShapesAndFailures(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			prepared := prepare(t, test.contract)
+			prepared := prepare(t, test.contract, test.mode)
 			summary, err := prepared.ValidateResult(strings.NewReader(test.body))
 			if test.kind == "" {
 				if err != nil {
