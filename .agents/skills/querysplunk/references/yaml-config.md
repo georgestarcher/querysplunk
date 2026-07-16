@@ -41,7 +41,7 @@ Important fields:
 - `results`: result endpoint, output mode, count, and offset.
 - `diagnostics.search_log`: `off`, `summary`, `save`, or `both`.
 
-When a descriptive block is present, querysplunk validates its required fields. Bundled out-of-box searches include all four descriptive blocks; compact user-created files may omit them. Metadata IDs must be lowercase namespaced values such as `querysplunk.health.scheduler-health`. Lifecycle status is one of `experimental`, `stable`, `deprecated`, or `retired`; severity is one of `informational`, `low`, `medium`, `high`, or `critical`.
+When a descriptive block is present, querysplunk validates its required fields. Bundled out-of-box searches include all four descriptive blocks; compact user-created files may omit them. Metadata IDs must be lowercase namespaced values such as `querysplunk.health.scheduler-health`. Lifecycle status is one of `draft`, `experimental`, `stable`, `deprecated`, or `retired`; severity is one of `informational`, `low`, `medium`, `high`, or `critical`.
 
 Secrets never belong in YAML. Use environment variables or a local `.env` mechanism for credentials.
 

@@ -677,7 +677,7 @@ func validateMetadata(metadata *Metadata) error {
 		return fmt.Errorf("%w: metadata.version must be at least 1", ErrInvalidConfig)
 	}
 	switch strings.TrimSpace(metadata.Status) {
-	case "draft", "experimental", "stable", "deprecated":
+	case "draft", "experimental", "stable", "deprecated", "retired":
 	default:
 		return fmt.Errorf("%w: metadata.status %q must be draft, experimental, stable, or deprecated", ErrInvalidConfig, metadata.Status)
 	}

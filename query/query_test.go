@@ -347,6 +347,29 @@ func TestMetadataValidationAndCopyIsolation(t *testing.T) {
 	}
 }
 
+func TestRetiredMetadataStatus(t *testing.T) {
+	t.Parallel()
+
+	config := query.Config{
+		SchemaVersion: query.CurrentSchemaVersion,
+		Metadata: &query.Metadata{
+			ID:          "querysplunk.test.retired-search",
+			Title:       "Retired search",
+			Description: "A retired reusable search retained for historical context.",
+			Category:    "test",
+			Status:      "retired",
+			Version:     1,
+			Author:      "querysplunk contributors",
+		},
+		App:    "search",
+		Search: "| makeresults",
+	}
+
+	if err := config.Validate(); err != nil {
+		t.Fatalf("Validate() rejected retired metadata status: %v", err)
+	}
+}
+
 func TestBundledSearchesHaveUniqueCompleteMetadata(t *testing.T) {
 	patterns := []string{"../examples/*/*.yml", "../.agents/skills/querysplunk/templates/*.yml"}
 	seen := make(map[string]string)
