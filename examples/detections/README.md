@@ -4,6 +4,17 @@ These examples provide bounded detection and threat-hunting searches for
 authorized defenders. Validate each YAML file offline before execution and
 review its data requirements, time range, and result sensitivity.
 
+## AI command telemetry research
+
+The [Splunk AI command telemetry mapping](AI-COMMAND-TELEMETRY.md) documents
+observed `_audit`, `_internal`, extension-worker, and `search.log` fields for
+Splunk AI Assistant activity. It includes a tested, bounded normalization SPL,
+an Agent Threat Rules-oriented field map, sensitivity and retention guidance,
+Splunk Cloud limitations, and the evidence boundary for future AI-agent
+detections. No AI-specific detection YAML is included yet; the mapping defines
+what the planned starter pack can support without inventing unavailable model,
+output, token, latency, or cross-source session data.
+
 ## Splunk Audit Logs detections
 
 These searches use the
