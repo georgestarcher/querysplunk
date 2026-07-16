@@ -82,8 +82,9 @@ output_file: detection-ai-sensitive-data-enrichment.json
 mode: job
 search: |
   search index=_audit action=search
+  | eval structural_search=replace(search, "(?s)\"(?:\\\\.|[^\"\\\\])*\"", "\"\"")
   | eval sensitive_before_ai_pattern="(?is)(?:\\|\\s*rest\\s+/services(?:NS/[^/\\s]+/[^/\\s]+)?/storage/passwords\\b|\\|\\s*inputlookup\\b[^\\n|]{0,300}(?:credential|secret|token|password|key)[^\\n|]*|\\b(?:clear_password|encr_password)\\b).*?\\|\\s*"."a"."i"."(?:\\s|$)"
-  | where match(search, sensitive_before_ai_pattern)
+  | where match(structural_search, sensitive_before_ai_pattern)
   | eval session_id=trim(search_id, "'"),
       source_rule_id="ATR-2026-00702",
       sensitive_surface="credential_bearing_source_or_field",

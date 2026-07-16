@@ -82,9 +82,12 @@ output_file: detection-ai-dynamic-execution-pipeline.json
 mode: job
 search: |
   search index=_audit action=search
-  | eval dynamic_execution_pattern="(?is)\\|\\s*ai(?:\\s|$).*?\\|\\s*(?:map|script)\\b[^|]*(?:\\$?ai_result_[0-9]+\\$?)"
-  | where match(search, dynamic_execution_pattern)
-  | rex field=search "(?is)\\|\\s*ai(?:\\s|$).*?\\|\\s*(?<dynamic_action>map|script)\\b[^|]*(?:\\$?ai_result_[0-9]+\\$?)"
+  | eval structural_search=replace(search, "(?s)\"(?:\\\\.|[^\"\\\\])*\"", "\"\"")
+  | eval ai_to_dynamic_pattern="(?is)\\|\\s*ai(?:\\s|$).*?\\|\\s*(?:map|script)\\b"
+  | where match(structural_search, ai_to_dynamic_pattern)
+  | rex field=search "(?is)\\|\\s*ai(?:\\s|$).*?\\|\\s*(?<dynamic_action>map|script)\\b(?<dynamic_arguments>(?:\"(?:\\\\.|[^\"\\\\])*\"|[^|])*)"
+  | eval ai_result_pattern="(?i)(?:\\$?ai_result_[0-9]+\\$?)"
+  | where match(dynamic_arguments, ai_result_pattern)
   | eval session_id=trim(search_id, "'"),
       source_rule_ids="ATR-2026-00711,ATR-2026-00714",
       dynamic_action=lower(dynamic_action),

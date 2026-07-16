@@ -14,7 +14,7 @@ const (
 	aiCommandPattern        = `(?i)\|\s*ai(?:\s|$)`
 	sensitiveInputPattern   = `(?is)(?:\|\s*rest\s+/services(?:NS/[^/\s]+/[^/\s]+)?/storage/passwords\b|\|\s*inputlookup\b[^\n|]{0,300}(?:credential|secret|token|password|key)[^\n|]*|\b(?:clear_password|encr_password)\b).*?\|\s*ai(?:\s|$)`
 	actionPipelinePattern   = `(?is)\|\s*ai(?:\s|$).*?\|\s*(?:sendemail|sendalert|collect|outputlookup|script)\b`
-	dynamicExecutionPattern = `(?is)\|\s*ai(?:\s|$).*?\|\s*(?:map|script)\b[^|]*(?:\$?ai_result_[0-9]+\$?)`
+	dynamicExecutionPattern = `(?is)\|\s*ai(?:\s|$).*?\|\s*(?:map|script)\b`
 )
 
 type aiDetectionSpec struct {
@@ -24,6 +24,7 @@ type aiDetectionSpec struct {
 	requiresAI    bool
 	stripQuoted   bool
 	fragmented    bool
+	dynamicResult bool
 	positive      []string
 	negative      []string
 }
@@ -37,6 +38,7 @@ func TestAIAgentDetectionPatterns(t *testing.T) {
 			sourceRuleIDs: []string{"ATR-2026-00702"},
 			patterns:      []string{sensitiveInputPattern},
 			fragmented:    true,
+			stripQuoted:   true,
 			positive: []string{
 				`| rest /services/storage/passwords | table clear_password | ai prompt="classify {clear_password}"`,
 				`| inputlookup credential_inventory | ai prompt="categorize {owner}"`,
@@ -46,6 +48,7 @@ func TestAIAgentDetectionPatterns(t *testing.T) {
 				`| rest /services/storage/passwords | table username`,
 				`| makeresults | eval note="password policy" | ai prompt="summarize {note}"`,
 				`index=main | ai prompt="summarize {message}" | eval clear_password="x"`,
+				`index=main | eval note="example: | rest /services/storage/passwords" | ai prompt="summarize {note}"`,
 			},
 		},
 		{
@@ -68,8 +71,11 @@ func TestAIAgentDetectionPatterns(t *testing.T) {
 			path:          "examples/detections/ai-agent/dynamic-execution-pipeline.yml",
 			sourceRuleIDs: []string{"ATR-2026-00711", "ATR-2026-00714"},
 			patterns:      []string{dynamicExecutionPattern},
+			stripQuoted:   true,
+			dynamicResult: true,
 			positive: []string{
 				`search index=main | ai prompt="classify {message}" | map search="search index=review value=\"$ai_result_1$\""`,
+				`search index=main | ai prompt="classify {message}" | map search="search index=review | eval q=\"$ai_result_1$\""`,
 				`search index=main | ai prompt="extract {message}" | script review.py ai_result_1`,
 			},
 			negative: []string{
@@ -111,12 +117,12 @@ func TestAIAgentDetectionPatterns(t *testing.T) {
 			}
 
 			for _, input := range spec.positive {
-				if !matchesAIDetection(input, spec.requiresAI, spec.stripQuoted, compiled) {
+				if !matchesAIDetection(input, spec.requiresAI, spec.stripQuoted, spec.dynamicResult, compiled) {
 					t.Errorf("positive input did not match: %q", input)
 				}
 			}
 			for _, input := range spec.negative {
-				if matchesAIDetection(input, spec.requiresAI, spec.stripQuoted, compiled) {
+				if matchesAIDetection(input, spec.requiresAI, spec.stripQuoted, spec.dynamicResult, compiled) {
 					t.Errorf("negative input matched: %q", input)
 				}
 			}
@@ -126,15 +132,35 @@ func TestAIAgentDetectionPatterns(t *testing.T) {
 	}
 }
 
-func matchesAIDetection(input string, requiresAI, stripQuoted bool, patterns []*regexp.Regexp) bool {
+func matchesAIDetection(input string, requiresAI, stripQuoted, dynamicResult bool, patterns []*regexp.Regexp) bool {
+	rawInput := input
 	if stripQuoted {
 		input = regexp.MustCompile(`(?s)"(?:\\.|[^"\\])*"`).ReplaceAllString(input, `""`)
 	}
 	if requiresAI && !regexp.MustCompile(aiCommandPattern).MatchString(input) {
 		return false
 	}
+	matched := false
 	for _, pattern := range patterns {
 		if pattern.MatchString(input) {
+			matched = true
+			break
+		}
+	}
+	if !matched {
+		return false
+	}
+	if dynamicResult {
+		return dynamicArgumentsContainAIResult(rawInput)
+	}
+	return true
+}
+
+func dynamicArgumentsContainAIResult(search string) bool {
+	dynamicCommand := regexp.MustCompile(`(?is)\|\s*(?:map|script)\b((?:"(?:\\.|[^"\\])*"|[^|])*)`)
+	aiResult := regexp.MustCompile(`(?i)(?:\$?ai_result_[0-9]+\$?)`)
+	for _, match := range dynamicCommand.FindAllStringSubmatch(search, -1) {
+		if len(match) > 1 && aiResult.MatchString(match[1]) {
 			return true
 		}
 	}

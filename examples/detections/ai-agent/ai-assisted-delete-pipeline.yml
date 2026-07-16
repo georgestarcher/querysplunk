@@ -62,10 +62,10 @@ search: |
   | eval search_hash=sha256(search)
   | eval app=coalesce(app, "unknown")
   | stats min(_time) AS first_seen, max(_time) AS last_seen, count AS executions, values(info) AS audit_outcomes, values(ai_result_reference) AS ai_result_reference BY user, app, search_hash
+  | sort 0 -last_seen
   | convert ctime(first_seen), ctime(last_seen)
   | eval detection_id="querysplunk.detection.ai-agent.ai-assisted-delete-pipeline"
   | eval finding="An ai command precedes a delete command in the same SPL pipeline."
-  | sort 0 -last_seen
   | head 100
   | table detection_id, first_seen, last_seen, user, app, search_hash, executions, audit_outcomes, ai_result_reference, finding
 
