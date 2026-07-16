@@ -106,6 +106,7 @@ func TestValidateResultContractShapesAndFailures(t *testing.T) {
 		{name: "empty allowed", body: `{"results":[]}`, contract: query.ResultContract{AllowEmpty: true}, rows: 0},
 		{name: "empty denied", body: `{"results":[]}`, contract: query.ResultContract{}, kind: query.ResultContractEmpty},
 		{name: "empty export allowed", body: "", contract: query.ResultContract{AllowEmpty: true}, mode: "export", rows: 0},
+		{name: "trimmed export mode", body: "", contract: query.ResultContract{AllowEmpty: true}, mode: " export ", rows: 0},
 		{name: "empty export denied", body: "", contract: query.ResultContract{}, mode: "export", kind: query.ResultContractEmpty},
 		{name: "empty job response", body: "", contract: query.ResultContract{AllowEmpty: true}, mode: "job", kind: query.ResultContractInvalidJSON},
 		{name: "missing field", body: `{"results":[{"secret":"do-not-leak"}]}`, contract: query.ResultContract{RequiredFields: []string{"name"}}, kind: query.ResultContractMissingField},

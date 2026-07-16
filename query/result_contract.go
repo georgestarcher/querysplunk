@@ -192,7 +192,7 @@ func (prepared Prepared) ValidateResult(reader io.Reader) (ResultContractSummary
 	if reader == nil {
 		return ResultContractSummary{Enforced: true}, &ResultContractError{Kind: ResultContractInvalidJSON}
 	}
-	rows, err := validateJSONResultContract(reader, *prepared.config.ResultContract, prepared.config.Mode == "export")
+	rows, err := validateJSONResultContract(reader, *prepared.config.ResultContract, strings.TrimSpace(prepared.config.Mode) == "export")
 	return ResultContractSummary{Enforced: true, Rows: rows}, err
 }
 
