@@ -12,7 +12,7 @@ import (
 
 const (
 	aiCommandPattern        = `(?i)\|\s*ai(?:\s|$)`
-	sensitiveInputPattern   = `(?i)(?:\|\s*rest\s+/services(?:NS/[^/\s]+/[^/\s]+)?/storage/passwords\b|\|\s*inputlookup\b[^\n|]{0,300}(?:credential|secret|token|password|key)[^\n|]*|\b(?:clear_password|encr_password)\b)`
+	sensitiveInputPattern   = `(?is)(?:\|\s*rest\s+/services(?:NS/[^/\s]+/[^/\s]+)?/storage/passwords\b|\|\s*inputlookup\b[^\n|]{0,300}(?:credential|secret|token|password|key)[^\n|]*|\b(?:clear_password|encr_password)\b).*?\|\s*ai(?:\s|$)`
 	actionPipelinePattern   = `(?is)\|\s*ai(?:\s|$).*?\|\s*(?:sendemail|sendalert|collect|outputlookup|script)\b`
 	dynamicExecutionPattern = `(?is)\|\s*ai(?:\s|$).*?\|\s*(?:map|script)\b[^|]*(?:\$?ai_result_[0-9]+\$?)`
 )
@@ -22,6 +22,8 @@ type aiDetectionSpec struct {
 	sourceRuleIDs []string
 	patterns      []string
 	requiresAI    bool
+	stripQuoted   bool
+	fragmented    bool
 	positive      []string
 	negative      []string
 }
@@ -34,7 +36,7 @@ func TestAIAgentDetectionPatterns(t *testing.T) {
 			path:          "examples/detections/ai-agent/sensitive-data-enrichment.yml",
 			sourceRuleIDs: []string{"ATR-2026-00702"},
 			patterns:      []string{sensitiveInputPattern},
-			requiresAI:    true,
+			fragmented:    true,
 			positive: []string{
 				`| rest /services/storage/passwords | table clear_password | ai prompt="classify {clear_password}"`,
 				`| inputlookup credential_inventory | ai prompt="categorize {owner}"`,
@@ -43,12 +45,14 @@ func TestAIAgentDetectionPatterns(t *testing.T) {
 				`index=main | ai prompt="summarize {message}"`,
 				`| rest /services/storage/passwords | table username`,
 				`| makeresults | eval note="password policy" | ai prompt="summarize {note}"`,
+				`index=main | ai prompt="summarize {message}" | eval clear_password="x"`,
 			},
 		},
 		{
 			path:          "examples/detections/ai-agent/downstream-action-pipeline.yml",
 			sourceRuleIDs: []string{"ATR-2026-00702"},
 			patterns:      []string{actionPipelinePattern},
+			stripQuoted:   true,
 			positive: []string{
 				`search index=main | ai prompt="classify {message}" | sendemail to="soc@example.invalid"`,
 				`search index=main | ai prompt="score {message}" | outputlookup review_queue`,
@@ -57,6 +61,7 @@ func TestAIAgentDetectionPatterns(t *testing.T) {
 				`search index=main | ai prompt="classify {message}" | table ai_result_1`,
 				`search index=main | sendemail to="soc@example.invalid" | ai prompt="summarize {message}"`,
 				`search index=main | ai prompt="explain the sendemail command"`,
+				`search index=main | ai prompt="explain why | sendemail is risky" | table ai_result_1`,
 			},
 		},
 		{
@@ -96,19 +101,22 @@ func TestAIAgentDetectionPatterns(t *testing.T) {
 
 			compiled := make([]*regexp.Regexp, 0, len(spec.patterns))
 			for _, pattern := range spec.patterns {
-				if !strings.Contains(config.Search, strconv.Quote(pattern)) {
+				if !spec.fragmented && !strings.Contains(config.Search, strconv.Quote(pattern)) {
 					t.Fatalf("search does not contain tested pattern %q", pattern)
+				}
+				if spec.fragmented && !strings.Contains(config.Search, `"a"."i"`) {
+					t.Fatal("fragmented pattern must construct the ai command name at runtime")
 				}
 				compiled = append(compiled, regexp.MustCompile(pattern))
 			}
 
 			for _, input := range spec.positive {
-				if !matchesAIDetection(input, spec.requiresAI, compiled) {
+				if !matchesAIDetection(input, spec.requiresAI, spec.stripQuoted, compiled) {
 					t.Errorf("positive input did not match: %q", input)
 				}
 			}
 			for _, input := range spec.negative {
-				if matchesAIDetection(input, spec.requiresAI, compiled) {
+				if matchesAIDetection(input, spec.requiresAI, spec.stripQuoted, compiled) {
 					t.Errorf("negative input matched: %q", input)
 				}
 			}
@@ -118,7 +126,10 @@ func TestAIAgentDetectionPatterns(t *testing.T) {
 	}
 }
 
-func matchesAIDetection(input string, requiresAI bool, patterns []*regexp.Regexp) bool {
+func matchesAIDetection(input string, requiresAI, stripQuoted bool, patterns []*regexp.Regexp) bool {
+	if stripQuoted {
+		input = regexp.MustCompile(`(?s)"(?:\\.|[^"\\])*"`).ReplaceAllString(input, `""`)
+	}
 	if requiresAI && !regexp.MustCompile(aiCommandPattern).MatchString(input) {
 		return false
 	}

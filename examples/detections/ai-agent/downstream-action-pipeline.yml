@@ -80,9 +80,10 @@ output_file: detection-ai-downstream-action-pipeline.json
 mode: job
 search: |
   search index=_audit action=search
+  | eval structural_search=replace(search, "(?s)\"(?:\\\\.|[^\"\\\\])*\"", "\"\"")
   | eval action_pipeline_pattern="(?is)\\|\\s*ai(?:\\s|$).*?\\|\\s*(?:sendemail|sendalert|collect|outputlookup|script)\\b"
-  | where match(search, action_pipeline_pattern)
-  | rex field=search "(?is)\\|\\s*ai(?:\\s|$).*?\\|\\s*(?<downstream_action>sendemail|sendalert|collect|outputlookup|script)\\b"
+  | where match(structural_search, action_pipeline_pattern)
+  | rex field=structural_search "(?is)\\|\\s*ai(?:\\s|$).*?\\|\\s*(?<downstream_action>sendemail|sendalert|collect|outputlookup|script)\\b"
   | eval session_id=trim(search_id, "'"),
       source_rule_id="ATR-2026-00702",
       downstream_action=lower(downstream_action),
