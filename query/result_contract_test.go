@@ -107,6 +107,7 @@ func TestValidateResultContractShapesAndFailures(t *testing.T) {
 		{name: "row limit", body: `{"results":[{"name":"one"},{"name":"two"}]}`, contract: query.ResultContract{MaximumRows: 1}, kind: query.ResultContractRowLimit},
 		{name: "invalid JSON", body: `{"results":[`, contract: query.ResultContract{AllowEmpty: true}, kind: query.ResultContractInvalidJSON},
 		{name: "invalid shape", body: `{"arbitrary":"do-not-leak"}`, contract: query.ResultContract{AllowEmpty: true}, kind: query.ResultContractInvalidShape},
+		{name: "metadata-only envelope", body: `{"messages":[{"type":"WARN","text":"do-not-leak"}],"preview":false}`, contract: query.ResultContract{AllowEmpty: true}, kind: query.ResultContractInvalidShape},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

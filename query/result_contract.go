@@ -292,7 +292,7 @@ func validateJSONResultContract(reader io.Reader, contract ResultContract) (int,
 }
 
 func consumeResultEnvelope(decoder *json.Decoder, contract ResultContract, rows *int) error {
-	recognized := false
+	hasResultContainer := false
 	for decoder.More() {
 		keyToken, err := decoder.Token()
 		if err != nil {
@@ -304,7 +304,7 @@ func consumeResultEnvelope(decoder *json.Decoder, contract ResultContract, rows 
 		}
 		switch key {
 		case "results":
-			recognized = true
+			hasResultContainer = true
 			start, err := decoder.Token()
 			if err != nil {
 				return &ResultContractError{Kind: ResultContractInvalidJSON, Err: err}
@@ -316,14 +316,11 @@ func consumeResultEnvelope(decoder *json.Decoder, contract ResultContract, rows 
 				return err
 			}
 		case "result":
-			recognized = true
+			hasResultContainer = true
 			if err := consumeResultRow(decoder, contract, rows); err != nil {
 				return err
 			}
 		default:
-			if key == "preview" || key == "lastrow" || key == "messages" || key == "fields" || key == "init_offset" || key == "offset" {
-				recognized = true
-			}
 			var discarded json.RawMessage
 			if err := decoder.Decode(&discarded); err != nil {
 				return &ResultContractError{Kind: ResultContractInvalidJSON, Err: err}
@@ -333,7 +330,7 @@ func consumeResultEnvelope(decoder *json.Decoder, contract ResultContract, rows 
 	if _, err := decoder.Token(); err != nil {
 		return &ResultContractError{Kind: ResultContractInvalidJSON, Err: err}
 	}
-	if !recognized {
+	if !hasResultContainer {
 		return &ResultContractError{Kind: ResultContractInvalidShape}
 	}
 	return nil
