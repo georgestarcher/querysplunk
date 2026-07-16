@@ -18,6 +18,15 @@ and use `install.sh` on macOS/Linux or `install.ps1` on Windows. Do not recreate
 the installer by manually copying files. The installer can target Codex, Claude
 Code, both, or neither and never reads Splunk credentials.
 
+For a first install, follow this order:
+
+1. Verify the user is working from an extracted release bundle.
+2. Run the bundled installer with the requested assistant target.
+3. Verify `querysplunk -version`.
+4. Verify the selected assistant skill files were installed.
+5. Tell the user to start a new assistant session if this is the first skill
+   installed for that assistant.
+
 Use the installer's explicit upgrade mode for a different installed version.
 Preserve saved YAML, results, environment files, credentials, configuration,
 shell settings, and unrelated skills. Never authorize a downgrade unless the
@@ -145,6 +154,12 @@ creating or materially changing SPL, also read `references/spl-authoring.md`.
 7. Read the configured `output_file` and summarize the result count and important fields.
 8. If `diagnostics.search_log` is `summary`, `save`, or `both`, surface warnings and errors reported by querysplunk.
 9. If `mode: export`, do not expect a search job ID or `search.log` diagnostics.
+
+When responding to the user, report the plan, safety findings, result count,
+important fields, job outcome, and bounded diagnostics. Do not paste full raw
+result files, complete search logs, private URLs, SPL that appears sensitive, or
+credentials. If a live command fails after dispatching a SID, prefer resuming
+or inspecting that SID before redispatching the same search.
 
 After results are saved, follow `references/result-analysis.md`. For bundled or
 user-maintained health checks, follow `references/health-diagnostics.md`. If a
