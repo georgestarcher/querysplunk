@@ -85,12 +85,15 @@ search: |
   | eval structural_search=replace(search, "(?s)\"(?:\\\\.|[^\"\\\\])*\"", "\"\"")
   | eval ai_to_dynamic_pattern="(?is)\\|\\s*ai(?:\\s|$).*?\\|\\s*(?:map|script)\\b"
   | where match(structural_search, ai_to_dynamic_pattern)
-  | rex field=search "(?is)\\|\\s*ai(?:\\s|$).*?\\|\\s*(?<dynamic_action>map|script)\\b(?<dynamic_arguments>(?:\"(?:\\\\.|[^\"\\\\])*\"|[^|])*)"
-  | eval ai_result_pattern="(?i)(?:\\$?ai_result_[0-9]+\\$?)"
-  | where match(dynamic_arguments, ai_result_pattern)
+  | rex field=search max_match=0 "(?is)(?:^|\\|)\\s*(?<pipeline_command>(?:\"(?:\\\\.|[^\"\\\\])*\"|[^|])*)"
+  | eval ai_command_index=mvfind(pipeline_command, "(?i)^ai(?:\\s|$)")
+  | eval post_ai_commands=mvindex(pipeline_command, ai_command_index+1, mvcount(pipeline_command)-1)
+  | eval dynamic_command_block=mvfilter(match(post_ai_commands, "(?is)^(?:map|script)\\b.*(?:\\$?ai_result_[0-9]+\\$?)"))
+  | where mvcount(dynamic_command_block)>0
+  | eval dynamic_action=mvmap(dynamic_command_block, if(match(dynamic_command_block, "(?i)^map\\b"), "map", "script"))
+  | eval dynamic_action=mvjoin(mvdedup(dynamic_action), ",")
   | eval session_id=trim(search_id, "'"),
       source_rule_ids="ATR-2026-00711,ATR-2026-00714",
-      dynamic_action=lower(dynamic_action),
       tool_input_sha256=sha256(search),
       tool_input_length=len(search)
   | stats count AS audit_event_count,

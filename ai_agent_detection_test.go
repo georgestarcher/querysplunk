@@ -77,10 +77,12 @@ func TestAIAgentDetectionPatterns(t *testing.T) {
 				`search index=main | ai prompt="classify {message}" | map search="search index=review value=\"$ai_result_1$\""`,
 				`search index=main | ai prompt="classify {message}" | map search="search index=review | eval q=\"$ai_result_1$\""`,
 				`search index=main | ai prompt="extract {message}" | script review.py ai_result_1`,
+				`search index=main | ai prompt="classify {message}" | map search="search index=review" | script review.py ai_result_1`,
 			},
 			negative: []string{
 				`search index=main | ai prompt="classify {message}" | map search="search index=review"`,
 				`search index=main | map search="search index=review value=\"$ai_result_1$\"" | ai prompt="classify {message}"`,
+				`search index=main | map search="search index=review value=\"$ai_result_1$\"" | ai prompt="classify {message}" | map search="search index=review"`,
 				`search index=main | ai prompt="classify {message}" | table ai_result_1`,
 			},
 		},
@@ -157,10 +159,24 @@ func matchesAIDetection(input string, requiresAI, stripQuoted, dynamicResult boo
 }
 
 func dynamicArgumentsContainAIResult(search string) bool {
-	dynamicCommand := regexp.MustCompile(`(?is)\|\s*(?:map|script)\b((?:"(?:\\.|[^"\\])*"|[^|])*)`)
+	pipelineCommand := regexp.MustCompile(`(?is)(?:^|\|)\s*((?:"(?:\\.|[^"\\])*"|[^|])*)`)
+	aiCommand := regexp.MustCompile(`(?i)^ai(?:\s|$)`)
+	dynamicCommand := regexp.MustCompile(`(?i)^(?:map|script)\b`)
 	aiResult := regexp.MustCompile(`(?i)(?:\$?ai_result_[0-9]+\$?)`)
-	for _, match := range dynamicCommand.FindAllStringSubmatch(search, -1) {
-		if len(match) > 1 && aiResult.MatchString(match[1]) {
+	commands := pipelineCommand.FindAllStringSubmatch(search, -1)
+	aiCommandIndex := -1
+	for index, match := range commands {
+		if len(match) > 1 && aiCommand.MatchString(match[1]) {
+			aiCommandIndex = index
+			break
+		}
+	}
+	if aiCommandIndex < 0 {
+		return false
+	}
+
+	for _, match := range commands[aiCommandIndex+1:] {
+		if len(match) > 1 && dynamicCommand.MatchString(match[1]) && aiResult.MatchString(match[1]) {
 			return true
 		}
 	}
