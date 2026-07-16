@@ -229,7 +229,7 @@ func (prepared Prepared) searchToWithResultContract(ctx context.Context, client 
 		spoolPath = ""
 	}
 
-	result, err := client.SearchTo(ctx, prepared.config.Search, cloneOptions(prepared.options), io.MultiWriter(output, spool))
+	result, err := client.SearchTo(ctx, prepared.config.Search, cloneOptions(prepared.options), spool)
 	if err != nil {
 		return result, err
 	}
@@ -237,6 +237,12 @@ func (prepared Prepared) searchToWithResultContract(ctx context.Context, client 
 		return result, err
 	}
 	if _, err := prepared.ValidateResult(spool); err != nil {
+		return result, err
+	}
+	if _, err := spool.Seek(0, io.SeekStart); err != nil {
+		return result, err
+	}
+	if _, err := io.Copy(output, spool); err != nil {
 		return result, err
 	}
 	return result, nil

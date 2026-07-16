@@ -1,6 +1,7 @@
 package query_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"net/http"
@@ -193,6 +194,13 @@ func TestSecretSearchToFilePermissionsAndAtomicContract(t *testing.T) {
 		t.Fatal(err)
 	}
 	responseBody = `{"result":{"unexpected":"do-not-leak"}}`
+	var streamed bytes.Buffer
+	if _, err := prepared.SearchTo(context.Background(), client, &streamed); !errors.Is(err, query.ErrResultContract) {
+		t.Fatalf("stream contract failure = %v; want ErrResultContract", err)
+	}
+	if streamed.Len() != 0 {
+		t.Fatalf("contract failure exposed %d bytes to the caller", streamed.Len())
+	}
 	if _, err := prepared.SearchToFile(context.Background(), client); !errors.Is(err, query.ErrResultContract) {
 		t.Fatalf("contract failure = %v; want ErrResultContract", err)
 	}
