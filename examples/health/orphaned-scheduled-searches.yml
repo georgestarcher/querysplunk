@@ -1,3 +1,41 @@
+schema_version: "1"
+metadata:
+  title: Orphaned scheduled searches
+  description: List scheduled searches whose owning user can no longer be resolved.
+  category: health
+  status: stable
+  version: 1
+  author: querysplunk contributors
+  severity: medium
+  tags:
+  - saved-search
+  - scheduler
+  - ownership
+  - rest
+  id: querysplunk.health.orphaned-scheduled-searches
+requirements:
+  platforms:
+  - splunk-cloud
+  - splunk-enterprise
+  fields:
+  - title
+  - app
+  - owner
+  - orphan
+  - is_scheduled
+provenance:
+  source: querysplunk
+  source_url: https://github.com/georgestarcher/querysplunk
+  source_rule_ids: []
+  license: MIT
+interpretation:
+  summary: Rows identify enabled scheduled searches that Splunk marks as orphaned.
+  false_positives:
+  - Intentional service-account migration can briefly leave searches orphaned.
+  recommended_actions:
+  - Assign an appropriate active owner or disable the schedule after confirming business
+    purpose and app context.
+
 app: search
 output_file: orphaned-scheduled-searches.json
 mode: job

@@ -1,3 +1,46 @@
+schema_version: "1"
+metadata:
+  title: Failed search activity
+  description: Identify failed search activity from the Splunk Audit Logs CIM data
+    model.
+  category: detection
+  status: experimental
+  version: 1
+  author: querysplunk contributors
+  severity: medium
+  tags:
+  - audit
+  - search
+  - failure
+  - cim
+  id: querysplunk.detection.failed-search-activity
+requirements:
+  platforms:
+  - splunk-cloud
+  - splunk-enterprise
+  apps:
+  - Splunk_SA_CIM
+  data_models:
+  - Splunk_Audit.Search_Activity
+  fields:
+  - user
+  - search
+  - info
+  - action
+provenance:
+  source: querysplunk
+  source_url: https://github.com/georgestarcher/querysplunk
+  source_rule_ids: []
+  license: MIT
+interpretation:
+  summary: Rows summarize failed searches by user and audited search context.
+  false_positives:
+  - Syntax mistakes, expired knowledge objects, or temporary service conditions can
+    produce benign failures.
+  recommended_actions:
+  - Review repeated failures, affected users, search content sensitivity, and surrounding
+    audit activity.
+
 app: search
 output_file: detection-failed-search-activity.json
 mode: job

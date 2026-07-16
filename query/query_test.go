@@ -28,7 +28,7 @@ func TestLoadStrictSchemaAndAllFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if config.App != "search" || config.OutputFile != "splunkresults.json" || config.Mode != "job" {
+	if config.SchemaVersion != query.CurrentSchemaVersion || config.App != "search" || config.OutputFile != "splunkresults.json" || config.Mode != "job" {
 		t.Fatalf("top-level fields not decoded: %#v", config)
 	}
 	if got := options.DispatchParams["max_count"]; len(got) != 1 || got[0] != "50000" {
@@ -270,6 +270,136 @@ func TestWriteSkeleton(t *testing.T) {
 	}
 	if err := query.WriteSkeleton(path, true); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestSchemaVersionCompatibility(t *testing.T) {
+	legacy, err := query.Load(strings.NewReader("search: search index=_internal earliest=-5m\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if legacy.SchemaVersion != "" {
+		t.Fatalf("legacy load schema version = %q; want omitted", legacy.SchemaVersion)
+	}
+	prepared, err := query.Prepare(legacy, query.Overrides{}, query.SafetyPolicy{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prepared.Plan().Config.SchemaVersion != query.CurrentSchemaVersion {
+		t.Fatalf("effective schema version = %q; want %q", prepared.Plan().Config.SchemaVersion, query.CurrentSchemaVersion)
+	}
+
+	_, err = query.Load(strings.NewReader("schema_version: \"2\"\nsearch: search index=_internal earliest=-5m\n"))
+	if !errors.Is(err, query.ErrInvalidConfig) || !errors.Is(err, query.ErrUnsupportedSchemaVersion) {
+		t.Fatalf("unsupported schema error = %v", err)
+	}
+	var versionError *query.SchemaVersionError
+	if !errors.As(err, &versionError) || versionError.Version != "2" {
+		t.Fatalf("typed schema error = %#v", versionError)
+	}
+}
+
+func TestMetadataValidationAndCopyIsolation(t *testing.T) {
+	config := query.Config{
+		SchemaVersion: query.CurrentSchemaVersion,
+		Search:        "search index=_internal earliest=-5m",
+		Metadata: &query.Metadata{
+			ID: "querysplunk.health.example", Title: "Example", Description: "Example search.", Category: "health",
+			Status: "stable", Version: 1, Author: "querysplunk contributors", Created: "2026-07-15", Severity: "low", Tags: []string{"example"},
+		},
+		Requirements:   &query.Requirements{Platforms: []string{"splunk-cloud"}, Apps: []string{"search"}, Indexes: []string{"_internal"}, Fields: []string{"host"}},
+		Provenance:     &query.Provenance{Source: "querysplunk", SourceURL: "https://github.com/georgestarcher/querysplunk", SourceRuleIDs: []string{"local-example"}, License: "MIT"},
+		Interpretation: &query.Interpretation{Summary: "Example interpretation.", FalsePositives: []string{"Test data."}, RecommendedActions: []string{"Review the event."}},
+	}
+	prepared, err := query.Prepare(config, query.Overrides{}, query.SafetyPolicy{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.Metadata.Tags[0] = "mutated"
+	config.Requirements.Platforms[0] = "mutated"
+	config.Provenance.SourceRuleIDs[0] = "mutated"
+	config.Interpretation.FalsePositives[0] = "mutated"
+	got := prepared.Config()
+	if got.Metadata.Tags[0] != "example" || got.Requirements.Platforms[0] != "splunk-cloud" || got.Provenance.SourceRuleIDs[0] != "local-example" || got.Interpretation.FalsePositives[0] != "Test data." {
+		t.Fatalf("prepared config aliases caller data: %#v", got)
+	}
+	got.Metadata.Tags[0] = "returned mutation"
+	if prepared.Config().Metadata.Tags[0] != "example" {
+		t.Fatal("prepared config accessor returned aliased metadata")
+	}
+
+	tests := map[string]query.Config{
+		"partial metadata": {Search: config.Search, Metadata: &query.Metadata{ID: "querysplunk.partial"}},
+		"invalid id":       {Search: config.Search, Metadata: &query.Metadata{ID: "Query Splunk", Title: "Example", Description: "Example.", Category: "health", Status: "stable", Version: 1, Author: "querysplunk"}},
+		"invalid status":   {Search: config.Search, Metadata: &query.Metadata{ID: "querysplunk.example", Title: "Example", Description: "Example.", Category: "health", Status: "ready", Version: 1, Author: "querysplunk"}},
+		"invalid severity": {Search: config.Search, Metadata: &query.Metadata{ID: "querysplunk.example", Title: "Example", Description: "Example.", Category: "health", Status: "stable", Version: 1, Author: "querysplunk", Severity: "urgent"}},
+		"invalid date":     {Search: config.Search, Metadata: &query.Metadata{ID: "querysplunk.example", Title: "Example", Description: "Example.", Category: "health", Status: "stable", Version: 1, Author: "querysplunk", Created: "07/15/2026"}},
+		"duplicate tag":    {Search: config.Search, Metadata: &query.Metadata{ID: "querysplunk.example", Title: "Example", Description: "Example.", Category: "health", Status: "stable", Version: 1, Author: "querysplunk", Tags: []string{"same", "same"}}},
+		"invalid source":   {Search: config.Search, Provenance: &query.Provenance{Source: "external", SourceURL: "relative/path", License: "MIT"}},
+		"empty summary":    {Search: config.Search, Interpretation: &query.Interpretation{}},
+	}
+	for name, invalid := range tests {
+		t.Run(name, func(t *testing.T) {
+			if err := invalid.Validate(); !errors.Is(err, query.ErrInvalidConfig) {
+				t.Fatalf("error = %v; want ErrInvalidConfig", err)
+			}
+		})
+	}
+}
+
+func TestRetiredMetadataStatus(t *testing.T) {
+	t.Parallel()
+
+	config := query.Config{
+		SchemaVersion: query.CurrentSchemaVersion,
+		Metadata: &query.Metadata{
+			ID:          "querysplunk.test.retired-search",
+			Title:       "Retired search",
+			Description: "A retired reusable search retained for historical context.",
+			Category:    "test",
+			Status:      "retired",
+			Version:     1,
+			Author:      "querysplunk contributors",
+		},
+		App:    "search",
+		Search: "| makeresults",
+	}
+
+	if err := config.Validate(); err != nil {
+		t.Fatalf("Validate() rejected retired metadata status: %v", err)
+	}
+}
+
+func TestBundledSearchesHaveUniqueCompleteMetadata(t *testing.T) {
+	patterns := []string{"../examples/*/*.yml", "../.agents/skills/querysplunk/templates/*.yml"}
+	seen := make(map[string]string)
+	count := 0
+	for _, pattern := range patterns {
+		matches, err := filepath.Glob(pattern)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, path := range matches {
+			if filepath.Base(path) == "handoff.yml" {
+				continue
+			}
+			config, err := query.LoadFile(path)
+			if err != nil {
+				t.Fatalf("load %s: %v", path, err)
+			}
+			count++
+			if config.SchemaVersion != query.CurrentSchemaVersion || config.Metadata == nil || config.Requirements == nil || config.Provenance == nil || config.Interpretation == nil {
+				t.Errorf("%s is missing complete OOB schema blocks", path)
+				continue
+			}
+			if previous, ok := seen[config.Metadata.ID]; ok {
+				t.Errorf("metadata id %q is duplicated by %s and %s", config.Metadata.ID, previous, path)
+			}
+			seen[config.Metadata.ID] = path
+		}
+	}
+	if count == 0 {
+		t.Fatal("no bundled search YAML files found")
 	}
 }
 

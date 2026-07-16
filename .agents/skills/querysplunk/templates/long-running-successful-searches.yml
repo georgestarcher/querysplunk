@@ -1,3 +1,47 @@
+schema_version: "1"
+metadata:
+  title: Long-running successful scheduled searches
+  description: Find successful scheduled searches whose runtime exceeds their cron
+    interval and profile retained search logs.
+  category: scheduler
+  status: stable
+  version: 1
+  author: querysplunk contributors
+  severity: medium
+  tags:
+  - scheduler
+  - performance
+  - search-log
+  - ai-analysis
+  id: querysplunk.scheduler.long-running-successful-searches
+requirements:
+  platforms:
+  - splunk-cloud
+  - splunk-enterprise
+  apps:
+  - Splunk_ML_Toolkit
+  indexes:
+  - _internal
+  fields:
+  - savedsearch_name
+  - sid
+  - run_time
+  - cron_schedule
+provenance:
+  source: querysplunk
+  source_url: https://github.com/georgestarcher/querysplunk
+  source_rule_ids: []
+  license: MIT
+interpretation:
+  summary: Rows identify successful scheduled jobs that may overlap their next scheduled
+    run and summarize retained search-log evidence.
+  false_positives:
+  - Intentionally long-running searches may be scheduled with overlap controls or
+    workload-management capacity.
+  recommended_actions:
+  - Review the runtime-to-cron ratio, search-log bottlenecks, scheduler configuration,
+    and workload placement.
+
 app: Splunk_ML_Toolkit
 output_file: long-running-successful-searches.json
 mode: job

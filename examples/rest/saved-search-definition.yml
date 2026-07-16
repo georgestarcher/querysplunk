@@ -1,3 +1,44 @@
+schema_version: "1"
+metadata:
+  title: Saved search definition
+  description: Inspect a saved search definition, schedule, actions, dispatch bounds,
+    and namespace context.
+  category: rest
+  status: stable
+  version: 1
+  author: querysplunk contributors
+  severity: informational
+  tags:
+  - saved-search
+  - knowledge-object
+  - rest
+  id: querysplunk.rest.saved-search-definition
+requirements:
+  platforms:
+  - splunk-cloud
+  - splunk-enterprise
+  fields:
+  - title
+  - search
+  - cron_schedule
+  - actions
+  - app
+  - owner
+  - sharing
+provenance:
+  source: querysplunk
+  source_url: https://github.com/georgestarcher/querysplunk
+  source_rule_ids: []
+  license: MIT
+interpretation:
+  summary: Rows describe a matching saved search and the settings needed to understand
+    its execution behavior.
+  false_positives:
+  - Searches with similar titles can exist in different app or sharing contexts.
+  recommended_actions:
+  - Confirm the app, owner, schedule, actions, and dispatch bounds before executing
+    or modifying the saved search.
+
 app: search
 output_file: saved-search-definition.json
 mode: job

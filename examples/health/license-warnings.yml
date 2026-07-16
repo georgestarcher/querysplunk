@@ -1,3 +1,40 @@
+schema_version: "1"
+metadata:
+  title: License warnings
+  description: Find recent license-related warnings in Splunk internal logs.
+  category: health
+  status: stable
+  version: 1
+  author: querysplunk contributors
+  severity: high
+  tags:
+  - license
+  - internal
+  - capacity
+  id: querysplunk.health.license-warnings
+requirements:
+  platforms:
+  - splunk-cloud
+  - splunk-enterprise
+  indexes:
+  - _internal
+  fields:
+  - component
+  - message
+provenance:
+  source: querysplunk
+  source_url: https://github.com/georgestarcher/querysplunk
+  source_rule_ids: []
+  license: MIT
+interpretation:
+  summary: Rows identify recent license warnings that may affect ingestion or search
+    behavior.
+  false_positives:
+  - Resolved historical warnings can remain visible within the selected time range.
+  recommended_actions:
+  - Check current license usage and pool status, then resolve sustained quota or entitlement
+    problems.
+
 app: search
 output_file: license-warnings.json
 mode: job

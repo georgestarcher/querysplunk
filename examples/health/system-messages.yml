@@ -1,3 +1,40 @@
+schema_version: "1"
+metadata:
+  title: System messages
+  description: List current Splunk system messages through the read-only messages
+    endpoint.
+  category: health
+  status: stable
+  version: 1
+  author: querysplunk contributors
+  severity: medium
+  tags:
+  - messages
+  - rest
+  - health
+  id: querysplunk.health.system-messages
+requirements:
+  platforms:
+  - splunk-cloud
+  - splunk-enterprise
+  fields:
+  - title
+  - severity
+  - message
+  - timeCreated_epochSecs
+provenance:
+  source: querysplunk
+  source_url: https://github.com/georgestarcher/querysplunk
+  source_rule_ids: []
+  license: MIT
+interpretation:
+  summary: Rows list current system messages that may require administrative attention.
+  false_positives:
+  - Acknowledged or already remediated messages can remain until Splunk clears them.
+  recommended_actions:
+  - Review severity and creation time, remediate active conditions, and clear messages
+    only through an authorized workflow.
+
 app: search
 output_file: system-messages.json
 mode: job

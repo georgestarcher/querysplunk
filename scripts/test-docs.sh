@@ -62,9 +62,27 @@ done
 unset SPLUNKBASEURL SPLUNKTOKEN SPLUNKUSERNAME SPLUNKPASSWORD SPLUNKAPP || true
 "$binary" -write-config "${tmp_dir}/generated.yml" >/dev/null 2>&1
 "$binary" -validate-config "${tmp_dir}/generated.yml" >"${tmp_dir}/generated-plan.yml"
-for config in examples/health/*.yml examples/rest/*.yml examples/detections/*.yml examples/pentest/*.yml; do
+metadata_ids="${tmp_dir}/oob-metadata-ids"
+: >"$metadata_ids"
+for config in examples/health/*.yml examples/rest/*.yml examples/detections/*.yml examples/pentest/*.yml \
+  .agents/skills/querysplunk/templates/long-running-successful-searches.yml \
+  .agents/skills/querysplunk/templates/recent-search-job-failures.yml; do
   "$binary" -validate-config "$config" >"${tmp_dir}/$(basename "$config").plan.yml"
+
+  grep -Fx 'schema_version: "1"' "$config" >/dev/null || fail "$config is missing schema_version 1"
+  for block in metadata requirements provenance interpretation; do
+    grep -Eq "^${block}:$" "$config" || fail "$config is missing its $block block"
+  done
+
+  metadata_id=$(sed -n 's/^  id: //p' "$config")
+  [ -n "$metadata_id" ] || fail "$config is missing metadata.id"
+  printf '%s\n' "$metadata_id" >>"$metadata_ids"
+
+  grep -Fx '  source_url: https://github.com/georgestarcher/querysplunk' "$config" >/dev/null || fail "$config is missing its canonical provenance source_url"
+  grep -Fx '  license: MIT' "$config" >/dev/null || fail "$config is missing its provenance license"
 done
+duplicate_metadata_ids=$(sort "$metadata_ids" | uniq -d)
+[ -z "$duplicate_metadata_ids" ] || fail "duplicate bundled metadata IDs: $duplicate_metadata_ids"
 
 skill_dir=".agents/skills/querysplunk"
 [ "$(sed -n '1p' "${skill_dir}/SKILL.md")" = "---" ] || fail "skill frontmatter is missing"

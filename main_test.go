@@ -378,6 +378,9 @@ func TestWriteSkeletonConfig(t *testing.T) {
 	if strings.TrimSpace(config.Search) == "" {
 		t.Fatal("expected skeleton config search content")
 	}
+	if config.SchemaVersion != querypkg.CurrentSchemaVersion {
+		t.Fatalf("skeleton schema version = %q; want %q", config.SchemaVersion, querypkg.CurrentSchemaVersion)
+	}
 }
 
 func TestWriteSkeletonConfigRefusesOverwrite(t *testing.T) {
