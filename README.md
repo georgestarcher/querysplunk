@@ -651,6 +651,12 @@ investigative leads, not automatic proof of malicious activity. Failed modular
 actions and repeated Splunk Web service errors remain operational health checks
 under `examples/health/`.
 
+The [Splunk AI command telemetry mapping](examples/detections/AI-COMMAND-TELEMETRY.md)
+records which audit, internal, extension-worker, and `search.log` fields are
+actually available for Splunk AI Assistant activity. It provides a tested
+privacy-preserving SPL baseline and documents the limits that future AI-agent
+detections must preserve.
+
 Lower-level knowledge-object inspection examples remain in `examples/rest/`,
 including saved-search definitions, macros, and lookup metadata or previews.
 
