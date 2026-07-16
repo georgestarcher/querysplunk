@@ -100,6 +100,8 @@ func TestValidateResultContractShapesAndFailures(t *testing.T) {
 		{name: "export frames", body: "{\"result\":{\"name\":\"one\"}}\n{\"result\":{\"name\":\"two\"}}\n", contract: query.ResultContract{RequiredFields: []string{"name"}, MaximumRows: 2}, rows: 2},
 		{name: "empty allowed", body: `{"results":[]}`, contract: query.ResultContract{AllowEmpty: true}, rows: 0},
 		{name: "empty denied", body: `{"results":[]}`, contract: query.ResultContract{}, kind: query.ResultContractEmpty},
+		{name: "empty export allowed", body: "", contract: query.ResultContract{AllowEmpty: true}, rows: 0},
+		{name: "empty export denied", body: "", contract: query.ResultContract{}, kind: query.ResultContractEmpty},
 		{name: "missing field", body: `{"results":[{"secret":"do-not-leak"}]}`, contract: query.ResultContract{RequiredFields: []string{"name"}}, kind: query.ResultContractMissingField},
 		{name: "row limit", body: `{"results":[{"name":"one"},{"name":"two"}]}`, contract: query.ResultContract{MaximumRows: 1}, kind: query.ResultContractRowLimit},
 		{name: "invalid JSON", body: `{"results":[`, contract: query.ResultContract{AllowEmpty: true}, kind: query.ResultContractInvalidJSON},

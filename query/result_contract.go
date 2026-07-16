@@ -274,7 +274,10 @@ func validateJSONResultContract(reader io.Reader, contract ResultContract) (int,
 		}
 	}
 	if documents == 0 {
-		return 0, &ResultContractError{Kind: ResultContractInvalidJSON}
+		if contract.AllowEmpty {
+			return 0, nil
+		}
+		return 0, &ResultContractError{Kind: ResultContractEmpty}
 	}
 	if rows == 0 && !contract.AllowEmpty {
 		return 0, &ResultContractError{Kind: ResultContractEmpty}
